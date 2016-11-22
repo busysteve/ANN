@@ -9,7 +9,7 @@
 
 const void* nullptr = NULL;
 
-enum ActType{ linear = 0, sigmoid, tangenth };
+enum ActType{ linear = 0, sigmoid, tangenth, cubed, naturalLog };
 
 
 template<typename T>
@@ -31,6 +31,18 @@ T actTanh( T n )
 }
 
 template<typename T>
+T actCubed( T n )
+{
+    return ( n * n * n );
+}
+
+template<typename T>
+T actLn( T n )
+{
+    return log( n );
+}
+
+template<typename T>
 T derivLinear( T n )
 {
     return 1.0;
@@ -46,6 +58,18 @@ template<typename T>
 T derivTanh( T n )
 {
     return 1.0 - n * n;
+}
+
+template<typename T>
+T derivCubed( T n )
+{
+    return 3 * ( n * n );
+}
+
+template<typename T>
+T derivLn( T n )
+{
+    return log( n );
 }
 
 
@@ -181,6 +205,16 @@ struct Layer
             {
                 nodes.push_back( new Node<T>( actTanh<T> ) );
                 _derivActFunc = derivTanh<T>;
+            }            
+            else if( act == cubed )
+            {
+                nodes.push_back( new Node<T>( actCubed<T> ) );
+                _derivActFunc = derivCubed<T>;
+            }            
+            else if( act == naturalLog )
+            {
+                nodes.push_back( new Node<T>( actLn<T> ) );
+                _derivActFunc = derivLn<T>;
             }            
         }
     }
@@ -427,8 +461,14 @@ int main( int argc, char**argv)
             case 'T':
                 NN.addLayer( atoi( &argv[i][1] ), tangenth );
                 break;
+            case 'C':
+                NN.addLayer( atoi( &argv[i][1] ), cubed );
+                break;
+            case 'e':
+                NN.addLayer( atoi( &argv[i][1] ), cubed );
+                break;
             default:
-                printf( "Layer types must be L, S, or T prefixed to the Node count.\n" );
+                printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
                 exit(1);
         }
     }
