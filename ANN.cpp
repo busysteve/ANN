@@ -9,6 +9,50 @@
 
 const void* nullptr = NULL;
 
+enum ActType{ linear = 0, sigmoid, tangenth };
+
+
+template<typename T>
+T actLinear( T n )
+{
+    return n;
+}
+
+template<typename T>
+T actSigmoid( T n )
+{
+    return 1.0 / ( 1.0 + exp(-n) );
+}
+
+template<typename T>
+T actTanh( T n )
+{
+    return tanh( n );
+}
+
+template<typename T>
+T derivLinear( T n )
+{
+    return 1.0;
+}
+
+template<typename T>
+T derivSigmoid( T n )
+{
+    return n * ( 1.0 - n );
+}
+
+template<typename T>
+T derivTanh( T n )
+{
+    return 1.0 - n * n;
+}
+
+
+
+
+
+
 template<typename T>
 struct Node;
 
@@ -52,8 +96,17 @@ struct Node
 
 	std::vector<Connection<T>*> conns;
 	std::vector<Connection<T>*> inConns;
+    
+    //ActType _activation;
 
-    Node() : inSum((T)0.0), lastOut((T)0.0), deltaErr((T)0.0), grad((T)1.0) {}
+    typedef T ( *ActFunc )(T);
+
+    ActFunc _actFunc;
+
+    Node( ActFunc actFunc ) : 
+        inSum((T)0.0), lastOut((T)0.0), 
+        deltaErr((T)0.0), grad((T)1.0), 
+        _actFunc(actFunc) {}
 
 	void input( T in )
     {
@@ -81,7 +134,7 @@ struct Node
         {
             for( int i=0; i < conns.size(); i++ )
             {
-                conns[i]->xmit( out );
+                conns[i]->xmit( _actFunc( out ) );
             }
             log( " *[%0.3f|%0.3f]", out, grad );
         }
@@ -102,13 +155,21 @@ struct Layer
     Layer<T>* prevLayer;
     Layer<T>* nextLayer;
 
+
     int count;
 
-    Layer( int n ) : count(n), prevLayer(NULL), nextLayer(NULL)
+    Layer( int n, ActType act ) : count(n), prevLayer(NULL), nextLayer(NULL)
     {
         for( int i=0; i < count; i++ )
         {
-            nodes.push_back( new Node<T>() );
+        if( act == linear )
+            nodes.push_back( new Node<T>( actLinear<T> ) );
+        else if( act == sigmoid )
+            nodes.push_back( new Node<T>( actSigmoid<T> ) );
+        else if( act == tangenth )
+            nodes.push_back( new Node<T>( actTanh<T> ) );
+
+            
         }
     }
 
@@ -126,6 +187,8 @@ struct Layer
         }
     }
 
+    
+
     void calcGradient( T target )
     {
         int i;
@@ -136,7 +199,9 @@ struct Layer
             {
                 //outGrad = outVal * ( 1.0 - outVal ) * ( target - outVal );
                 outGrad =  ( target - nodes[i]->lastOut );
-                nodes[i]->grad = outGrad * 1.0; // TODO provided all derivatives here
+                //nodes[i]->grad = outGrad * derivLinear( target );; // TODO provided all derivatives here
+                //nodes[i]->grad = outGrad * derivSigmoid( target ); // TODO provided all derivatives here
+                nodes[i]->grad = outGrad * derivTanh<T>( target ); // TODO provided all derivatives here
                 log(" @{%f}\n", nodes[i]->grad );
             }
         }
@@ -235,21 +300,18 @@ struct NeuralNet
 
     std::vector<Layer<T>*> layers;
 
-    enum ActType{ linear = 0, sigmoid, tanh };
 
-    ActType _activation;
-
-    NeuralNet( T learn_rate, T momentum, ActType activation )
-        : _learnRate( learn_rate ), _momentum( momentum ), _activation( activation )
+    NeuralNet( T learn_rate, T momentum )
+        : _learnRate( learn_rate ), _momentum( momentum )
     {
     }
 
-    void addLayer( int n )
+    void addLayer( int n, ActType act )
     {
         if( n < 1 )
             return;
 
-        layers.push_back( new Layer<T>(n) );
+        layers.push_back( new Layer<T>(n, act ) );
 
         int size = layers.size();
 
@@ -330,7 +392,7 @@ int main( int argc, char**argv)
     if( argc < 8 )
     {
         printf("\nusage: ann learn_rate momentum trainings counter beyond in_layer-node-count [follow layers node count]\n");
-        printf("\nexample: ./ann 0.002 0.02 15 7 2 1 2 2 1\n\n");
+        printf("\nexample: ./ann 0.002 0.02 15 7 2 T1 T2 T2 L1\n\n");
 
         exit(1);
     }
@@ -341,11 +403,26 @@ int main( int argc, char**argv)
     double end = atof( argv[4] );
     double beyond = atof( argv[5] );
 
-    NeuralNet<double> NN( lr, mo, NeuralNet<double>::linear );
+    NeuralNet<double> NN( lr, mo );
 
     for( int i=6; i < argc; i++ )
-        NN.addLayer( atoi( argv[i] ) );
-
+    {
+        switch( argv[i][0] )
+        {
+            case 'L':
+                NN.addLayer( atoi( &argv[i][1] ), linear );
+                break;
+            case 'S':
+                NN.addLayer( atoi( &argv[i][1] ), sigmoid );
+                break;
+            case 'T':
+                NN.addLayer( atoi( &argv[i][1] ), tangenth );
+                break;
+            default:
+                printf( "Layer types must be L, S, or T prefixed to the Node count.\n" );
+                exit(1);
+        }
+    }
 
     double t, out;
     for( int x=1; x <= trains; x++ )
