@@ -21,7 +21,7 @@ struct Connection
 
     Node<T> *toNode;
 
-	Connection( Node<T>* node ) : toNode( node ), alpha((T)1.0), delta((T)0.0)
+    Connection( Node<T>* node ) : toNode( node ), alpha((T)1.0), delta((T)0.0)
     {
         T rnd = (T)std::rand() / RAND_MAX;
 
@@ -143,16 +143,16 @@ struct Layer
         {
             for( int n = nodes.size()-1; n >= 0; n-- ) 
             {
-                T errSum = 0.0;
+                T sum = 0.0;
                 for( int c = nodes[n]->conns.size()-1; c >= 0; c-- ) 
                 {
                         T nextGrad = nodes[n]->conns[c]->toNode->grad;
-                        errSum += ( nodes[n]->conns[c]->weight ) * nextGrad;
+                        sum += ( nodes[n]->conns[c]->weight ) * nextGrad;
                 }
 
-                nodes[n]->grad = errSum;
+                nodes[n]->grad = sum;
 
-                printf(" {%f}\n", errSum );
+                printf(" {%f}\n", sum );
             }
         }
 
@@ -175,9 +175,10 @@ struct Layer
                     delta = nodes[i]->inConns[c]->delta;
                     grad = nodes[i]->grad;
                     out = nodes[i]->lastOut;
-                    weight = nodes[i]->inConns[c]->weight;
+                    //weight = nodes[i]->inConns[c]->weight;
 
-                    delta = learnRate * grad * out + momentum * delta;
+                    //delta = learnRate * grad * out + momentum * delta;
+                    delta = momentum * delta + learnRate * grad * out;
 
                     nodes[i]->inConns[c]->delta = delta;
                     weight = (nodes[i]->inConns[c]->weight += delta); 
@@ -322,35 +323,48 @@ struct NeuralNet
 int main( int argc, char**argv)
 {
 
-    if( argc < 5 )
+    if( argc < 8 )
     {
-        printf("\nusage: ann learn_rate momentum iterations in_layer-node-count [follow layers node count]\n");
-        printf("\nexample: ann 0.005 0.008 1 2 2 1\n\n");
+        printf("\nusage: ann learn_rate momentum trainings counter beyond in_layer-node-count [follow layers node count]\n");
+        printf("\nexample: ./ann 0.002 0.02 15 7 2 1 2 2 1\n\n");
 
         exit(1);
     }
     
     double lr = atof( argv[1] );
     double mo = atof( argv[2] );
-    double end = atof( argv[3] );
+    double trains = atof( argv[3] );
+    double end = atof( argv[4] );
+    double beyond = atof( argv[5] );
 
     NeuralNet<double> NN( lr, mo, NeuralNet<double>::linear );
 
-    for( int i=4; i < argc; i++ )
+    for( int i=6; i < argc; i++ )
         NN.addLayer( atoi( argv[i] ) );
 
 
-    for( double t=1.0, d=0.0, e=0.0; t <= end; t++ )
+    double t;
+    for( int x=0; x < trains; x++ )
+    for( t=1.0; t <= end; t++ )
     {
         NN.setInput( 0, t );
 
         NN.cycle();
 
-        NN.backProp( t );
+        NN.backProp( t * t );
 
         //printf( "%f\t", t );
 
         //std::cout << NN.getOutput( 0 ) << std::endl;
+    }
+
+    for( ; t<=end+beyond; t++ )
+    {
+        NN.setInput( 0, t );
+
+        NN.cycle();
+
+        printf( "%f\t%f\n", t, NN.getOutput( 0 ) );
     }
 
     return 0;
