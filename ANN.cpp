@@ -235,7 +235,7 @@ struct Layer
 
     
 
-    void calcGradient( T target )
+    void calcGradient( std::vector<T> &targets )
     {
         int i;
         if( nextLayer == NULL ) // output layer
@@ -243,8 +243,8 @@ struct Layer
             T outGrad;
             for( i=nodes.size()-1; i>=0; i-- )
             {
-                outGrad =  ( target - nodes[i]->lastOut );
-                nodes[i]->grad = outGrad * _derivActFunc( target );
+                outGrad =  ( targets[i] - nodes[i]->lastOut );
+                nodes[i]->grad = outGrad * _derivActFunc( targets[i] );
                 log(" @{%f}\n", nodes[i]->grad );
             }
         }
@@ -267,7 +267,7 @@ struct Layer
 
         if( prevLayer != NULL )
             //if( prevLayer->prevLayer != NULL )
-                prevLayer->calcGradient(target); // target not usedin the following calls
+                prevLayer->calcGradient(targets); // target not usedin the following calls
     }
 
     void updateWeights( T learnRate, T momentum )
@@ -343,6 +343,7 @@ struct NeuralNet
 
     std::vector<Layer<T>*> layers;
 
+    std::vector<T> vecBackPrepTargets;
 
     NeuralNet( T learn_rate, T momentum )
         : _learnRate( learn_rate ), _momentum( momentum )
@@ -405,19 +406,26 @@ struct NeuralNet
     }
 
 
-    void backProp( T target )
+    void backPushTargets( T t )
+    {
+        vecBackPrepTargets.push_back( t );
+    }
+
+    void backPropagate()
     {
 
         // * Calc error for layers
         _outLayer->calcError();
         
         // * Calc gradients recursively
-        _outLayer->calcGradient( target );
+        _outLayer->calcGradient( vecBackPrepTargets );
 
         // Update weights
         _outLayer->updateWeights( _learnRate, _momentum );
 
-        T outVal = _outLayer->nodes[0]->lastOut;
+        //T outVal = _outLayer->nodes[0]->lastOut;
+        
+        vecBackPrepTargets.clear();
 
     }
 
@@ -473,16 +481,21 @@ int main( int argc, char**argv)
         }
     }
 
-    double t, out;
+    double t, out = 1.0, prevOut = 1.0;
     for( int x=1; x <= trains; x++ )
     for( t=1.0; t <= end; t++ )
     {
         NN.setInput( 0, t );
+        NN.setInput( 1, out );
+        NN.setInput( 2, prevOut );
 
         NN.cycle();
 
-        NN.backProp( problem(t) );
+        NN.backPushTargets( problem(t) );  // Target x = problem() target
 
+        NN.backPropagate();
+
+        prevOut;
         out = NN.getOutput( 0 );
 
         if( x == trains )
@@ -493,9 +506,12 @@ int main( int argc, char**argv)
     for( ; t<=end+beyond; t++ )
     {
         NN.setInput( 0, t );
+        NN.setInput( 1, out );
+        NN.setInput( 2, prevOut );
 
         NN.cycle();
 
+        prevOut = out;
         out = NN.getOutput( 0 );
 
         printf( "%f\t%f\t%f\t%f\n", t, out, problem(t) - out, problem(t) );
