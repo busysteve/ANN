@@ -5,6 +5,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 
 const void* nullptr = NULL;
 
@@ -16,25 +17,23 @@ template<typename T>
 struct Connection
 {
 
-    T weight, deltaWeight;
+    T weight, alpha, delta;
 
     Node<T> *toNode;
 
-	//Connection( void Node<T>::(*iofunc)( T ) ) : output(iofunc) 
-	Connection( Node<T>* node ) : toNode( node ) 
+	Connection( Node<T>* node ) : toNode( node ), alpha((T)1.0), delta((T)0.0)
     {
         T rnd = (T)std::rand() / RAND_MAX;
 
-        weight = ( rnd * (T)0.5 ) - ( (T)0.5 / (T)2.0 );
+        weight = ( rnd * (T)1.5 ) - ( (T)1.5 / (T)2.0 );
     }
-
-	//void Node<T>::(*output)( T );
 
 	void xmit( T in )
 	{
 		if( toNode != nullptr )
         {
 			toNode->input( in*weight ); // Apply weight here
+            printf( " <%0.3f|%0.3f>(%f)\n", in, weight, in*weight );
         }
 	}
 
@@ -51,8 +50,9 @@ struct Node
     T grad;
 
 	std::vector<Connection<T>*> conns;
+	std::vector<Connection<T>*> inConns;
 
-    Node() : inSum((T)0.0), lastOut((T)0.0), deltaErr((T)0.0), grad((T)0.0) {}
+    Node() : inSum((T)0.0), lastOut((T)0.0), deltaErr((T)0.0), grad((T)1.0) {}
 
 	void input( T in )
     {
@@ -69,6 +69,7 @@ struct Node
     {
         Connection<T>* pConn = new Connection<T>( node );
         conns.push_back( pConn );
+        node->inConns.push_back( pConn );
     }
 
     void activate()
@@ -81,15 +82,13 @@ struct Node
             {
                 conns[i]->xmit( out );
             }
-            
-            lastOut = out;
-
-            inSum = (T)0.0;
+            printf( " *[%0.3f|%0.3f]", out, grad );
         }
 
         lastOut = out;
 
         inSum = (T)0.0;
+       
     }
 
 };
@@ -106,7 +105,7 @@ struct Layer
 
     Layer( int n ) : count(n), prevLayer(NULL), nextLayer(NULL)
     {
-        for( int i=0; i < n; i++ )
+        for( int i=0; i < count; i++ )
         {
             nodes.push_back( new Node<T>() );
         }
@@ -126,8 +125,90 @@ struct Layer
         }
     }
 
+    void calcGradient( T target )
+    {
+        int i;
+        if( nextLayer == NULL ) // output layer
+        {
+            T outGrad;
+            for( i=nodes.size()-1; i>=0; i-- )
+            {
+                //outGrad = outVal * ( 1.0 - outVal ) * ( target - outVal );
+                outGrad =  ( target - nodes[i]->lastOut );
+                nodes[i]->grad = outGrad * 1.0; // TODO provided all derivatives here
+                printf(" @{%f}\n", nodes[i]->grad );
+            }
+        }
+        else
+        {
+            for( int n = nodes.size()-1; n >= 0; n-- ) 
+            {
+                T errSum = 0.0;
+                for( int c = nodes[n]->conns.size()-1; c >= 0; c-- ) 
+                {
+                        T nextGrad = nodes[n]->conns[c]->toNode->grad;
+                        errSum += ( nodes[n]->conns[c]->weight ) * nextGrad;
+                }
+
+                nodes[n]->grad = errSum;
+
+                printf(" {%f}\n", errSum );
+            }
+        }
+
+        if( prevLayer != NULL )
+            //if( prevLayer->prevLayer != NULL )
+                prevLayer->calcGradient(target); // target not usedin the following calls
+    }
+
+    void updateWeights( T learnRate, T momentum )
+    {
+        // Update weights
+        T alpha, delta, grad, out, weight;
+        if( prevLayer != NULL /* || layer == _inLayer */ )
+        {
+            for( int i=nodes.size()-1; i>=0; i-- )
+            {
+                for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- ) 
+                {
+                    alpha = nodes[i]->inConns[c]->alpha;
+                    delta = nodes[i]->inConns[c]->delta;
+                    grad = nodes[i]->grad;
+                    out = nodes[i]->lastOut;
+                    weight = nodes[i]->inConns[c]->weight;
+
+                    delta = learnRate * grad * out + momentum * delta;
+
+                    nodes[i]->inConns[c]->delta = delta;
+                    weight = (nodes[i]->inConns[c]->weight += delta); 
+                    nodes[i]->inConns[c]->alpha = weight / delta;
+                    
+                }
+            }
+
+            prevLayer->updateWeights( learnRate, momentum );
+        }
+    }
+
+    T calcError()
+    {
+        T netErr, outVal;
+        int nc = nodes.size();
+        for( int i=nc-1; i>=0; i-- )
+        {
+            outVal = nodes[i]->lastOut;
+            netErr +=  ( outVal * outVal );  // TODO: Handle more targets
+        }
+        netErr /= (T)nc;
+        netErr = sqrt( netErr );
+
+        return netErr;
+    }
+
     void activate()
     {
+        printf("\n");
+
         for( int i=0; i<count; i++ )
         {
             nodes[i]->activate();
@@ -135,132 +216,141 @@ struct Layer
 
         if( nextLayer != NULL )
             nextLayer->activate();
+
+        printf("\n");
     }
 
 };
 
 
-
-
-int main()
+template<typename T>
+struct NeuralNet
 {
 
+    T _learnRate;
+    T _momentum;
+    Layer<T> *_inLayer, *_outLayer;
 
-    double learnRate = 0.05;
-    double momentum = 0.05;
+    std::vector<Layer<T>*> layers;
 
-    Layer<double>   inLayer(1);
-    Layer<double>   hiddenLayer1(2);
-    Layer<double>   hiddenLayer2(2);
-    //Layer<double>   hiddenLayer3(2);
-    Layer<double>   outLayer(1);
+    enum ActType{ linear = 0, sigmoid, tanh };
 
-    inLayer.bindLayer( &hiddenLayer1 );
-    hiddenLayer1.bindLayer( &hiddenLayer2 );
-    //hiddenLayer2.bindLayer( &hiddenLayer3 );
-    hiddenLayer2.bindLayer( &outLayer );
+    ActType _activation;
 
-    double o = 0.0;
-    double outErr;
-
-    for( double t=1.0, d=0.0, e=0.0; t <= 100; t++ )
+    NeuralNet( T learn_rate, T momentum, ActType activation )
+        : _learnRate( learn_rate ), _momentum( momentum ), _activation( activation )
     {
-        //double target = t*t;
-        //double target = t*t;
-        double target = sin(t);
-        int i;
-        inLayer.nodes[0]->input(target);
+    }
 
-        inLayer.activate();
+    void addLayer( int n )
+    {
+        if( n < 1 )
+            return;
 
-        o = outLayer.nodes[0]->lastOut;
+        layers.push_back( new Layer<T>(n) );
 
+        int size = layers.size();
 
-
-        //e = d = target - o;  // Calc error
-        // * Calc gradient for hidden layers
-        Layer<double>* layer = outLayer.prevLayer;
-        while( layer->prevLayer != NULL )
+        if( size > 1 )
         {
-            for( i=layer->nodes.size()-1; i>=0; i-- )
-            {
-                outErr = 0.0;
-                for( int c = layer->nodes[i]->conns.size()-1; c >= 0; c-- ) 
-                {
-                    for( int nn = layer->nextLayer->nodes.size()-1; nn >=0; nn-- )
-                        outErr +=  ( layer->nodes[i]->lastOut - target );
-                                    //* ( layer->nodes[i]->lastOut - target );
-                }
-                layer->nodes[i]->grad = outErr * 1.0;
-                layer->nodes[i]->deltaErr = outErr;
-            }
-
-            layer = layer->prevLayer;        
-
+            layers[size-2]->bindLayer( layers[size-1] );
+            _outLayer = layers[size-1];
         }
+        else
+        {
+            _inLayer = layers[0];
+        }
+    }    
+
+    /*
+    Layer<T>* getLayer( int n )
+    {
+        return layers[n];
+    } 
+    */   
+
+    int getInputNodeCount()
+    {
+        return _inLayer->nodes.size();
+    }
+
+    int getOutputNodeCount()
+    {
+        return _outLayer->nodes.size();
+    }
+
+    void setInput( int inNode, T value )
+    {
+        _inLayer->nodes[inNode]->input( value );
+    }
+
+    T getOutput( int outNode )
+    {
+        return _outLayer->nodes[outNode]->lastOut;
+    }
+
+    void cycle()
+    {
+
+        // Start activation recursion
+        _inLayer->activate();
+
+    }
+
+
+    void backProp( T target )
+    {
+
+        // * Calc error for layers
+        _outLayer->calcError();
         
-
-        // * Calc gradient for output layer
-        for( i=outLayer.nodes.size()-1; i>=0; i-- )
-        {
-            outErr = outLayer.nodes[i]->lastOut - target;
-            outLayer.nodes[i]->grad = outErr * 1.0;
-        }
-
-
-        // * Calc gradient for hidden layers
-        layer = outLayer.prevLayer;
-        while( layer->prevLayer != NULL )
-        {
-            for( i=layer->nodes.size()-1; i>=0; i-- )
-            {
-                outErr = 0.0;
-                for( int c = layer->nodes[i]->conns.size()-1; c >= 0; c-- ) 
-                {
-                    for( int nn = layer->nextLayer->nodes.size()-1; nn >=0; nn-- )
-                        outErr += layer->nodes[i]->conns[c]->weight * layer->nextLayer->nodes[nn]->grad;
-                }
-                layer->nodes[i]->grad = outErr * 1.0;
-            }
-
-            layer = layer->prevLayer;        
-
-        }
-
-
-
+        // * Calc gradients recursively
+        _outLayer->calcGradient( target );
 
         // Update weights
-        double oldDeltaWeight, newDeltaWeight;
-        layer = outLayer.prevLayer;
-        while( layer->prevLayer != NULL )
-        {
-            for( i=layer->nodes.size()-1; i>=0; i-- )
-            for( int pn=layer->prevLayer->nodes.size()-1; i>=0; i-- )
-            {
-                outErr = 0.0;
-                for( int c = layer->nodes[i]->conns.size()-1; c >= 0; c-- ) 
-                {
-                    oldDeltaWeight = layer->nodes[i]->conns[c]->deltaWeight;
+        _outLayer->updateWeights( _learnRate, _momentum );
 
-                    newDeltaWeight =    learnRate 
-                                        * layer->nodes[i]->grad
-                                        / layer->prevLayer->nodes[pn]->out()
-                                        + momentum
-                                        * oldDeltaWeight;
+        T outVal = _outLayer->nodes[0]->lastOut;
 
-                    layer->nodes[i]->conns[c]->deltaWeight = newDeltaWeight;
-                    layer->nodes[i]->conns[c]->weight += newDeltaWeight;
-                }
-            }
+        std::cout << target << "\t" << outVal << "\t" << target-outVal << std::endl;
 
-            layer = layer->prevLayer;        
+    }
 
-        }
+};
 
 
-        std::cout << target << "\t" << o << "\t" << target-o << std::endl;
+int main( int argc, char**argv)
+{
 
+    if( argc < 5 )
+    {
+        printf("\nusage: ann learn_rate momentum iterations in_layer-node-count [follow layers node count]\n");
+        printf("\nexample: ann 0.005 0.008 1 2 2 1\n\n");
+
+        exit(1);
+    }
+    
+    double lr = atof( argv[1] );
+    double mo = atof( argv[2] );
+    double end = atof( argv[3] );
+
+    NeuralNet<double> NN( lr, mo, NeuralNet<double>::linear );
+
+    for( int i=4; i < argc; i++ )
+        NN.addLayer( atoi( argv[i] ) );
+
+
+    for( double t=1.0, d=0.0, e=0.0; t <= end; t++ )
+    {
+        NN.setInput( 0, t );
+
+        NN.cycle();
+
+        NN.backProp( t );
+
+        //printf( "%f\t", t );
+
+        //std::cout << NN.getOutput( 0 ) << std::endl;
     }
 
     return 0;
