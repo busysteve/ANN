@@ -12,6 +12,7 @@ const void* nullptr = NULL;
 template<typename T>
 struct Node;
 
+#define log //printf
 
 template<typename T>
 struct Connection
@@ -33,7 +34,7 @@ struct Connection
 		if( toNode != nullptr )
         {
 			toNode->input( in*weight ); // Apply weight here
-            printf( " <%0.3f|%0.3f>(%f)\n", in, weight, in*weight );
+            log( " <%0.3f|%0.3f>(%f)\n", in, weight, in*weight );
         }
 	}
 
@@ -82,7 +83,7 @@ struct Node
             {
                 conns[i]->xmit( out );
             }
-            printf( " *[%0.3f|%0.3f]", out, grad );
+            log( " *[%0.3f|%0.3f]", out, grad );
         }
 
         lastOut = out;
@@ -136,7 +137,7 @@ struct Layer
                 //outGrad = outVal * ( 1.0 - outVal ) * ( target - outVal );
                 outGrad =  ( target - nodes[i]->lastOut );
                 nodes[i]->grad = outGrad * 1.0; // TODO provided all derivatives here
-                printf(" @{%f}\n", nodes[i]->grad );
+                log(" @{%f}\n", nodes[i]->grad );
             }
         }
         else
@@ -152,7 +153,7 @@ struct Layer
 
                 nodes[n]->grad = sum;
 
-                printf(" {%f}\n", sum );
+                log(" {%f}\n", sum );
             }
         }
 
@@ -208,7 +209,7 @@ struct Layer
 
     void activate()
     {
-        printf("\n");
+        log("\n");
 
         for( int i=0; i<count; i++ )
         {
@@ -218,7 +219,7 @@ struct Layer
         if( nextLayer != NULL )
             nextLayer->activate();
 
-        printf("\n");
+        log("\n");
     }
 
 };
@@ -313,12 +314,15 @@ struct NeuralNet
 
         T outVal = _outLayer->nodes[0]->lastOut;
 
-        std::cout << target << "\t" << outVal << "\t" << target-outVal << std::endl;
-
     }
 
 };
 
+
+double problem( double n )
+{
+    return n*n;
+}
 
 int main( int argc, char**argv)
 {
@@ -343,19 +347,21 @@ int main( int argc, char**argv)
         NN.addLayer( atoi( argv[i] ) );
 
 
-    double t;
-    for( int x=0; x < trains; x++ )
+    double t, out;
+    for( int x=1; x <= trains; x++ )
     for( t=1.0; t <= end; t++ )
     {
         NN.setInput( 0, t );
 
         NN.cycle();
 
-        NN.backProp( t * t );
+        NN.backProp( problem(t) );
 
-        //printf( "%f\t", t );
+        out = NN.getOutput( 0 );
 
-        //std::cout << NN.getOutput( 0 ) << std::endl;
+        if( x == trains )
+            printf( "%f\t%f\t%f\n", t, out, problem(t) - out);
+        
     }
 
     for( ; t<=end+beyond; t++ )
@@ -364,12 +370,13 @@ int main( int argc, char**argv)
 
         NN.cycle();
 
-        printf( "%f\t%f\n", t, NN.getOutput( 0 ) );
+        out = NN.getOutput( 0 );
+
+        printf( "%f\t%f\t%f\t%f\n", t, out, problem(t) - out, problem(t) );
     }
 
     return 0;
 };
-
 
 
 
