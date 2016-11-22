@@ -155,21 +155,33 @@ struct Layer
     Layer<T>* prevLayer;
     Layer<T>* nextLayer;
 
+    ActType _activation;
+
+    typedef T ( *derivActFunc )(T);
+
+    derivActFunc _derivActFunc;
 
     int count;
 
-    Layer( int n, ActType act ) : count(n), prevLayer(NULL), nextLayer(NULL)
+    Layer( int n, ActType act ) : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act)
     {
         for( int i=0; i < count; i++ )
         {
-        if( act == linear )
-            nodes.push_back( new Node<T>( actLinear<T> ) );
-        else if( act == sigmoid )
-            nodes.push_back( new Node<T>( actSigmoid<T> ) );
-        else if( act == tangenth )
-            nodes.push_back( new Node<T>( actTanh<T> ) );
-
-            
+            if( act == linear )
+            {
+                nodes.push_back( new Node<T>( actLinear<T> ) );
+                _derivActFunc = derivLinear<T>;
+            }
+            else if( act == sigmoid )
+            {
+                nodes.push_back( new Node<T>( actSigmoid<T> ) );
+                _derivActFunc = derivSigmoid<T>;
+            }
+            else if( act == tangenth )
+            {
+                nodes.push_back( new Node<T>( actTanh<T> ) );
+                _derivActFunc = derivTanh<T>;
+            }            
         }
     }
 
@@ -197,11 +209,8 @@ struct Layer
             T outGrad;
             for( i=nodes.size()-1; i>=0; i-- )
             {
-                //outGrad = outVal * ( 1.0 - outVal ) * ( target - outVal );
                 outGrad =  ( target - nodes[i]->lastOut );
-                //nodes[i]->grad = outGrad * derivLinear( target );; // TODO provided all derivatives here
-                //nodes[i]->grad = outGrad * derivSigmoid( target ); // TODO provided all derivatives here
-                nodes[i]->grad = outGrad * derivTanh<T>( target ); // TODO provided all derivatives here
+                nodes[i]->grad = outGrad * _derivActFunc( target );
                 log(" @{%f}\n", nodes[i]->grad );
             }
         }
