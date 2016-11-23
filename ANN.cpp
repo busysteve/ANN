@@ -57,7 +57,7 @@ T derivTanh( T n )
 template<typename T>
 struct Node;
 
-#define log //printf
+#define log printf
 
 template<typename T>
 struct Connection
@@ -319,11 +319,21 @@ struct NeuralNet
 
     std::vector<T> vecBackPrepTargets;
 
-    NeuralNet( T learn_rate, T momentum )
+    NeuralNet( T learn_rate = 0.0001, T momentum = 0.001 )
         : _learnRate( learn_rate ), _momentum( momentum )
     {
     }
 
+	void setLearnRate( T lr )
+	{
+		_learnRate = lr;
+	}
+	
+	void setMomentum( T mo )
+	{
+		_momentum = mo;
+	}
+	
     void addLayer( int n, ActType act )
     {
         if( n < 1 )
@@ -353,12 +363,16 @@ struct NeuralNet
 
     int getInputNodeCount()
     {
-        return _inLayer->nodes.size();
+		if( _inLayer != NULL )
+			return _inLayer->nodes.size();
+		return 0;
     }
 
     int getOutputNodeCount()
     {
-        return _outLayer->nodes.size();
+		if( _outLayer != NULL )
+			return _outLayer->nodes.size();
+		return 0;
     }
 
     void setInput( int inNode, T value )
@@ -452,6 +466,8 @@ struct NeuralNet
 					refConnection.addTag( "weight", _inLayer->nodes[n]->conns[c]->weight );
 				}
 			}
+			
+			layer = layer->nextLayer;
 		}
 		
 		xml.store( fileName.c_str() );
@@ -478,77 +494,76 @@ int main( int argc, char**argv)
     int i = 1, training_iterations=1;
 	FILE *t_fp = NULL;
 
-    if( argv[i][0] == '-' )
+    NeuralNet<double> NN;
+
+    while( i < argc && argv[i][0] == '-' )
     {
         switch( argv[i][1] )
         {
             case 'w':
                 ++i;
                 strWeights = argv[i];
+				++i;
                 break;
             case 't':
                 ++i;
                 strTrainingFile = argv[i];
+				++i;
 				t_fp = fopen( strTrainingFile.c_str(), "r" );
                 break;
             case 'i':
                 ++i;
                 training_iterations = atoi( argv[i] );
+				++i;
                 break;
             case 'r':
                 ++i;
-                lr = atof( argv[i] );;
+                lr = atof( argv[i] );
+				NN.setLearnRate( lr );
+				++i;
                 break;
             case 'm':
                 ++i;
-                mo = atof( argv[i] );;
+                mo = atof( argv[i] );
+				NN.setMomentum( mo );
+				++i;
                 break;
             case 's':
                 ++i;
                 srand( atoi( argv[i] ) );
+				++i;
                 break;
-            default:
-				;
-        }
-		
-    }
-	
-    NeuralNet<double> NN( lr, mo );
-	
-    if( argv[i][0] == '-' )
-    {
-        switch( argv[i][1] )
-        {
             case 'l':
-            ++i;
-			{
-				for( ; i < argc; i++ )
+				++i;
 				{
-					switch( argv[i][0] )
+					for( ; i < argc; i++ )
 					{
-						case 'L':
-							NN.addLayer( atoi( &argv[i][1] ), linear );
-							break;
-						case 'S':
-							NN.addLayer( atoi( &argv[i][1] ), sigmoid );
-							break;
-						case 'T':
-							NN.addLayer( atoi( &argv[i][1] ), tangenth );
-							break;
-						case '-':
-							break;
-						default:
-							printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
-							exit(1);
+						switch( argv[i][0] )
+						{
+							case 'L':
+								NN.addLayer( atoi( &argv[i][1] ), linear );
+								break;
+							case 'S':
+								NN.addLayer( atoi( &argv[i][1] ), sigmoid );
+								break;
+							case 'T':
+								NN.addLayer( atoi( &argv[i][1] ), tangenth );
+								break;
+							case '-':
+								break;
+							default:
+								printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
+								exit(1);
+						}
 					}
+					break;
 				}
-                break;
-			}
-
+            default:
+				printf("Unknown switch ( -%c )\n", argv[i][1] );
+				exit(1);
         }
 		
     }
-
 	
 	int ic = NN.getInputNodeCount();
 	int oc = NN.getOutputNodeCount();
@@ -567,8 +582,10 @@ int main( int argc, char**argv)
 				for( int t=0; t < ic; t++ )
 				{
 					double val;	
-					fscanf( t_fp, "%lf", val );
+					fscanf( t_fp, "%lf", &val );
 					NN.setInput( t, val );
+					
+					printf( "I%d=%lf ", t, val );
 				}
 				NN.cycle();
 
@@ -576,10 +593,15 @@ int main( int argc, char**argv)
 				for( int t=0; t < oc; t++ )
 				{
 					double val;	
-					fscanf( t_fp, "%lf", val );
+					fscanf( t_fp, "%lf", &val );
+					printf( "O%d=%lf ", t, val );
 					NN.backPushTargets( val );  
+					
+
 				}
 				NN.backPropagate();
+				
+				printf( "\n" );
 			}
 		}
 		
