@@ -97,6 +97,11 @@ struct Connection
         weight = ( rnd * (T)1.5 ) - ( (T)1.5 / (T)2.0 );
     }
 
+    void loadweight( FILE *fp )
+    {
+        fscanf( fp, "%lf", &weight );
+    }
+
 	void xmit( T in )
 	{
 		if( toNode != nullptr )
@@ -118,6 +123,8 @@ struct Node
     T deltaErr;
     T grad;
 
+    FILE* _fp;
+
 	std::vector<Connection<T>*> conns;
 	std::vector<Connection<T>*> inConns;
     
@@ -127,10 +134,11 @@ struct Node
 
     ActFunc _actFunc;
 
-    Node( ActFunc actFunc ) : 
+    Node( ActFunc actFunc, FILE* fp ) : 
         inSum((T)0.0), lastOut((T)0.0), 
         deltaErr((T)0.0), grad((T)1.0), 
-        _actFunc(actFunc) {}
+        _actFunc(actFunc),
+        _fp(fp) {}
 
 	void input( T in )
     {
@@ -148,6 +156,10 @@ struct Node
         Connection<T>* pConn = new Connection<T>( node );
         conns.push_back( pConn );
         node->inConns.push_back( pConn );
+
+        if( _fp != NULL )
+            pConn->loadweight( _fp );
+
     }
 
     void activate()
@@ -187,33 +199,36 @@ struct Layer
 
     int count;
 
-    Layer( int n, ActType act ) : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act)
+    FILE *_fp;
+
+    Layer( int n, ActType act, FILE* fp ) 
+        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _fp( fp )
     {
         for( int i=0; i < count; i++ )
         {
             if( act == linear )
             {
-                nodes.push_back( new Node<T>( actLinear<T> ) );
+                nodes.push_back( new Node<T>( actLinear<T>, _fp ) );
                 _derivActFunc = derivLinear<T>;
             }
             else if( act == sigmoid )
             {
-                nodes.push_back( new Node<T>( actSigmoid<T> ) );
+                nodes.push_back( new Node<T>( actSigmoid<T>, _fp ) );
                 _derivActFunc = derivSigmoid<T>;
             }
             else if( act == tangenth )
             {
-                nodes.push_back( new Node<T>( actTanh<T> ) );
+                nodes.push_back( new Node<T>( actTanh<T>, _fp ) );
                 _derivActFunc = derivTanh<T>;
             }            
             else if( act == cubed )
             {
-                nodes.push_back( new Node<T>( actCubed<T> ) );
+                nodes.push_back( new Node<T>( actCubed<T>, _fp ) );
                 _derivActFunc = derivCubed<T>;
             }            
             else if( act == naturalLog )
             {
-                nodes.push_back( new Node<T>( actLn<T> ) );
+                nodes.push_back( new Node<T>( actLn<T>, _fp ) );
                 _derivActFunc = derivLn<T>;
             }            
         }
@@ -341,12 +356,14 @@ struct NeuralNet
     T _momentum;
     Layer<T> *_inLayer, *_outLayer;
 
+    FILE* _fp;
+
     std::vector<Layer<T>*> layers;
 
     std::vector<T> vecBackPrepTargets;
 
-    NeuralNet( T learn_rate, T momentum )
-        : _learnRate( learn_rate ), _momentum( momentum )
+    NeuralNet( T learn_rate, T momentum, FILE* fp = NULL )
+        : _learnRate( learn_rate ), _momentum( momentum ), _fp( fp )
     {
     }
 
@@ -355,7 +372,7 @@ struct NeuralNet
         if( n < 1 )
             return;
 
-        layers.push_back( new Layer<T>(n, act ) );
+        layers.push_back( new Layer<T>(n, act, _fp ) );
 
         int size = layers.size();
 
@@ -448,6 +465,22 @@ int main( int argc, char**argv)
         exit(1);
     }
     
+    FILE *fp = NULL;
+
+    int i = 1;
+
+    if( argv[i][0] == '-' )
+    {
+        switch( argv[i][1] )
+        {
+            case 'w':
+                ++i;
+                fp = fopen( argv[i], "rw" );
+                break;
+            default:
+        }
+    }
+
     double lr = atof( argv[1] );
     double mo = atof( argv[2] );
     double trains = atof( argv[3] );
@@ -473,7 +506,7 @@ int main( int argc, char**argv)
                 NN.addLayer( atoi( &argv[i][1] ), cubed );
                 break;
             case 'e':
-                NN.addLayer( atoi( &argv[i][1] ), cubed );
+                NN.addLayer( atoi( &argv[i][1] ), naturalLog );
                 break;
             default:
                 printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
@@ -486,8 +519,8 @@ int main( int argc, char**argv)
     for( t=1.0; t <= end; t++ )
     {
         NN.setInput( 0, t );
-        NN.setInput( 1, out );
-        NN.setInput( 2, prevOut );
+        //NN.setInput( 1, out );
+        //NN.setInput( 2, prevOut );
 
         NN.cycle();
 
@@ -506,8 +539,8 @@ int main( int argc, char**argv)
     for( ; t<=end+beyond; t++ )
     {
         NN.setInput( 0, t );
-        NN.setInput( 1, out );
-        NN.setInput( 2, prevOut );
+        //NN.setInput( 1, out );
+        //NN.setInput( 2, prevOut );
 
         NN.cycle();
 
@@ -519,6 +552,5 @@ int main( int argc, char**argv)
 
     return 0;
 };
-
 
 
