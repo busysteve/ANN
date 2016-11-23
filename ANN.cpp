@@ -1,6 +1,8 @@
 
 // g++ -g -o ann ANN.cpp XMLTag/xmltag.cpp
 // ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -x 10 -i input.txt -l S2 S3 S2 S1
+// or
+// ./ann -w test.weights.xml -i input.txt
 
 /* train.txt
 0 0 0
@@ -493,12 +495,40 @@ struct NeuralNet
 
 	void load( std::string fileName )
 	{
-		XMLTag xml;
+		XMLTag NNxml;
 		
-		xml.load( fileName );
+		NNxml.load( fileName.c_str() );
 		
-		//for( int i = 0; i < 
-	}};
+		for( int layer = 0; layer < NNxml.count(); layer++ )
+		{
+			std::string activation = NNxml[layer].attribute( "activation" );
+	
+			XMLTag &xNodes = NNxml[layer]["nodes"];
+
+			// Add Layer - with nodes
+			if( activation[0] == 'l' )
+				addLayer( xNodes.count(), linear );
+			else if( activation[0] == 's' )
+				addLayer( xNodes.count(), sigmoid );
+			else if( activation[0] == 't' )
+				addLayer( xNodes.count(), tangenth );
+		}
+		
+		
+		for( int layer = 0; layer < NNxml.count(); layer++ )
+		{
+			XMLTag &xNodes = NNxml[layer]["nodes"];
+
+			for( int node=0; node<xNodes.count(); node++ )
+			{
+				XMLTag &xConnections = xNodes[node]["connections"];
+				
+				for( int conn=0; conn<xConnections.count(); conn++ )
+					layers[layer]->nodes[node]->conns[conn]->weight = xConnections[conn]["weight"].floatValue();
+			}
+		}
+	}
+};
 
 
 int main( int argc, char**argv)
@@ -640,18 +670,23 @@ int main( int argc, char**argv)
 		NN.store( strWeights.c_str() );
 				
 	}
+	else
+	{
+		NN.load( strWeights.c_str() );
+	}
+	
 	
 	if( i_fp != NULL )
 	{
-		fseek( t_fp, 0, SEEK_SET );
+		fseek( i_fp, 0, SEEK_SET );
 		
-		while( !feof(t_fp) )
+		while( !feof(i_fp) )
 		{
 			// Cycle inputs
 			for( int t=0; t < ic; t++ )
 			{
 				double val;	
-				fscanf( t_fp, "%lf", &val );
+				fscanf( i_fp, "%lf", &val );
 				NN.setInput( t, val );
 				
 				//printf( "I%d=%lf ", t, val );
@@ -663,7 +698,7 @@ int main( int argc, char**argv)
 			{
 				double val;	
 				//fscanf( t_fp, "%lf", &val );
-				fscanf( t_fp, "%l1.0f", &val );
+				fscanf( i_fp, "%l1.0f", &val );
 				
 				//printf( "O%d=%lf ", t, val );
 				
