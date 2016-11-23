@@ -3,9 +3,13 @@
 
 #include <iostream>
 #include <vector>
+#include <string>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <ctime>
+#include "XMLTag/xmltag.h"
+
 
 const void* nullptr = NULL;
 
@@ -31,18 +35,6 @@ T actTanh( T n )
 }
 
 template<typename T>
-T actCubed( T n )
-{
-    return ( n * n * n );
-}
-
-template<typename T>
-T actLn( T n )
-{
-    return log( n );
-}
-
-template<typename T>
 T derivLinear( T n )
 {
     return 1.0;
@@ -59,21 +51,6 @@ T derivTanh( T n )
 {
     return 1.0 - n * n;
 }
-
-template<typename T>
-T derivCubed( T n )
-{
-    return 3 * ( n * n );
-}
-
-template<typename T>
-T derivLn( T n )
-{
-    return log( n );
-}
-
-
-
 
 
 
@@ -123,8 +100,6 @@ struct Node
     T deltaErr;
     T grad;
 
-    FILE* _fp;
-
 	std::vector<Connection<T>*> conns;
 	std::vector<Connection<T>*> inConns;
     
@@ -134,11 +109,10 @@ struct Node
 
     ActFunc _actFunc;
 
-    Node( ActFunc actFunc, FILE* fp ) : 
+    Node( ActFunc actFunc ) : 
         inSum((T)0.0), lastOut((T)0.0), 
         deltaErr((T)0.0), grad((T)1.0), 
-        _actFunc(actFunc),
-        _fp(fp) {}
+        _actFunc(actFunc) {}
 
 	void input( T in )
     {
@@ -156,9 +130,6 @@ struct Node
         Connection<T>* pConn = new Connection<T>( node );
         conns.push_back( pConn );
         node->inConns.push_back( pConn );
-
-        if( _fp != NULL )
-            pConn->loadweight( _fp );
 
     }
 
@@ -199,37 +170,25 @@ struct Layer
 
     int count;
 
-    FILE *_fp;
-
-    Layer( int n, ActType act, FILE* fp ) 
-        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _fp( fp )
+    Layer( int n, ActType act ) 
+        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act)
     {
         for( int i=0; i < count; i++ )
         {
             if( act == linear )
             {
-                nodes.push_back( new Node<T>( actLinear<T>, _fp ) );
+                nodes.push_back( new Node<T>( actLinear<T> ) );
                 _derivActFunc = derivLinear<T>;
             }
             else if( act == sigmoid )
             {
-                nodes.push_back( new Node<T>( actSigmoid<T>, _fp ) );
+                nodes.push_back( new Node<T>( actSigmoid<T> ) );
                 _derivActFunc = derivSigmoid<T>;
             }
             else if( act == tangenth )
             {
-                nodes.push_back( new Node<T>( actTanh<T>, _fp ) );
+                nodes.push_back( new Node<T>( actTanh<T> ) );
                 _derivActFunc = derivTanh<T>;
-            }            
-            else if( act == cubed )
-            {
-                nodes.push_back( new Node<T>( actCubed<T>, _fp ) );
-                _derivActFunc = derivCubed<T>;
-            }            
-            else if( act == naturalLog )
-            {
-                nodes.push_back( new Node<T>( actLn<T>, _fp ) );
-                _derivActFunc = derivLn<T>;
             }            
         }
     }
@@ -356,14 +315,12 @@ struct NeuralNet
     T _momentum;
     Layer<T> *_inLayer, *_outLayer;
 
-    FILE* _fp;
-
     std::vector<Layer<T>*> layers;
 
     std::vector<T> vecBackPrepTargets;
 
-    NeuralNet( T learn_rate, T momentum, FILE* fp = NULL )
-        : _learnRate( learn_rate ), _momentum( momentum ), _fp( fp )
+    NeuralNet( T learn_rate, T momentum )
+        : _learnRate( learn_rate ), _momentum( momentum )
     {
     }
 
@@ -372,7 +329,7 @@ struct NeuralNet
         if( n < 1 )
             return;
 
-        layers.push_back( new Layer<T>(n, act, _fp ) );
+        layers.push_back( new Layer<T>(n, act ) );
 
         int size = layers.size();
 
@@ -387,12 +344,12 @@ struct NeuralNet
         }
     }    
 
-    /*
+    
     Layer<T>* getLayer( int n )
     {
         return layers[n];
     } 
-    */   
+     
 
     int getInputNodeCount()
     {
@@ -446,28 +403,80 @@ struct NeuralNet
 
     }
 
+	void store( std::string fileName )
+	{
+		XMLTag xml("NeuralNet");
+		
+		Layer<double>* layer = _inLayer;
+
+		while( layer->nextLayer != NULL )
+		{
+			XMLTag &refLayer = xml.addTag( "layer" );
+			
+			if( layer == _inLayer )
+				refLayer.setAttribute( "name", "input_layer" );
+			else if( layer == _inLayer )
+				refLayer.setAttribute( "name", "output_layer" );
+			else
+				refLayer.setAttribute( "name", "hidden_layer" );
+			std::string activation;
+			
+			ActType act = layer->_activation;
+			
+            if( act == linear )
+            {
+				activation = "linear";
+            }
+            else if( act == sigmoid )
+            {
+				activation = "sigmoid";
+            }
+            else if( act == tangenth )
+            {
+				activation = "tangenth";
+            }
+            
+			refLayer.setAttribute( "activation", activation );
+						
+			XMLTag &refNodes = refLayer.addTag( "nodes" );
+			
+			for( int n=0; n < _inLayer->nodes.size(); n++ )
+			{
+				XMLTag &refNode = refNodes.addTag( "node" );
+				
+				XMLTag &refConnections = refNode.addTag( "connections" );
+
+				for( int c=0; c < _inLayer->nodes[n]->conns.size(); c++ )
+				{
+					XMLTag &refConnection = refConnections.addTag( "connection" );
+					refConnection.addTag( "weight", _inLayer->nodes[n]->conns[c]->weight );
+				}
+			}
+		}
+		
+		xml.store( fileName.c_str() );
+	}
 };
 
-
-double problem( double n )
-{
-    return n*n;
-}
 
 int main( int argc, char**argv)
 {
 
-    if( argc < 8 )
+    if( argc < 3 )
     {
-        printf("\nusage: ann learn_rate momentum trainings counter beyond in_layer-node-count [follow layers node count]\n");
-        printf("\nexample: ./ann 0.002 0.02 15 7 2 T1 T2 T2 L1\n\n");
+		printf("\nusage: ann -w [(r/w)weights (restore) file name] { -t training_file -r learn_rate -m momentum -l [Layer spec] }\n");
+        printf("\nexample: ./ann -w saved.weights.xml -r 0.002 -m 0.02 -l S2 S3 S2 L1\n\n");
+		printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );	
 
         exit(1);
     }
-    
-    FILE *fp = NULL;
 
-    int i = 1;
+	srand( time(NULL) );
+    
+	std::string strTrainingFile, strWeights ( "temp.weights.xml" );
+	double lr=0.0, mo=0.0;
+    int i = 1, training_iterations=1;
+	FILE *t_fp = NULL;
 
     if( argv[i][0] == '-' )
     {
@@ -475,81 +484,109 @@ int main( int argc, char**argv)
         {
             case 'w':
                 ++i;
-                fp = fopen( argv[i], "rw" );
+                strWeights = argv[i];
+                break;
+            case 't':
+                ++i;
+                strTrainingFile = argv[i];
+				t_fp = fopen( strTrainingFile.c_str(), "r" );
+                break;
+            case 'i':
+                ++i;
+                training_iterations = atoi( argv[i] );
+                break;
+            case 'r':
+                ++i;
+                lr = atof( argv[i] );;
+                break;
+            case 'm':
+                ++i;
+                mo = atof( argv[i] );;
+                break;
+            case 's':
+                ++i;
+                srand( atoi( argv[i] ) );
                 break;
             default:
+				;
         }
+		
     }
-
-    double lr = atof( argv[1] );
-    double mo = atof( argv[2] );
-    double trains = atof( argv[3] );
-    double end = atof( argv[4] );
-    double beyond = atof( argv[5] );
-
+	
     NeuralNet<double> NN( lr, mo );
-
-    for( int i=6; i < argc; i++ )
+	
+    if( argv[i][0] == '-' )
     {
-        switch( argv[i][0] )
+        switch( argv[i][1] )
         {
-            case 'L':
-                NN.addLayer( atoi( &argv[i][1] ), linear );
+            case 'l':
+            ++i;
+			{
+				for( ; i < argc; i++ )
+				{
+					switch( argv[i][0] )
+					{
+						case 'L':
+							NN.addLayer( atoi( &argv[i][1] ), linear );
+							break;
+						case 'S':
+							NN.addLayer( atoi( &argv[i][1] ), sigmoid );
+							break;
+						case 'T':
+							NN.addLayer( atoi( &argv[i][1] ), tangenth );
+							break;
+						case '-':
+							break;
+						default:
+							printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
+							exit(1);
+					}
+				}
                 break;
-            case 'S':
-                NN.addLayer( atoi( &argv[i][1] ), sigmoid );
-                break;
-            case 'T':
-                NN.addLayer( atoi( &argv[i][1] ), tangenth );
-                break;
-            case 'C':
-                NN.addLayer( atoi( &argv[i][1] ), cubed );
-                break;
-            case 'e':
-                NN.addLayer( atoi( &argv[i][1] ), naturalLog );
-                break;
-            default:
-                printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
-                exit(1);
+			}
+
         }
+		
     }
 
-    double t, out = 1.0, prevOut = 1.0;
-    for( int x=1; x <= trains; x++ )
-    for( t=1.0; t <= end; t++ )
-    {
-        NN.setInput( 0, t );
-        //NN.setInput( 1, out );
-        //NN.setInput( 2, prevOut );
+	
+	int ic = NN.getInputNodeCount();
+	int oc = NN.getOutputNodeCount();
+	
+	
+	if( t_fp != NULL )
+	{
+		
+		for( int x=0; x < training_iterations; x++ )
+		{
+			fseek( t_fp, 0, SEEK_SET );
+			
+			while( !feof(t_fp) )
+			{
+				// Cycle inputs
+				for( int t=0; t < ic; t++ )
+				{
+					double val;	
+					fscanf( t_fp, "%lf", val );
+					NN.setInput( t, val );
+				}
+				NN.cycle();
 
-        NN.cycle();
-
-        NN.backPushTargets( problem(t) );  // Target x = problem() target
-
-        NN.backPropagate();
-
-        prevOut;
-        out = NN.getOutput( 0 );
-
-        if( x == trains )
-            printf( "%f\t%f\t%f\n", t, out, problem(t) - out);
-        
-    }
-
-    for( ; t<=end+beyond; t++ )
-    {
-        NN.setInput( 0, t );
-        //NN.setInput( 1, out );
-        //NN.setInput( 2, prevOut );
-
-        NN.cycle();
-
-        prevOut = out;
-        out = NN.getOutput( 0 );
-
-        printf( "%f\t%f\t%f\t%f\n", t, out, problem(t) - out, problem(t) );
-    }
-
+				// Set targets for back propagation (training)
+				for( int t=0; t < oc; t++ )
+				{
+					double val;	
+					fscanf( t_fp, "%lf", val );
+					NN.backPushTargets( val );  
+				}
+				NN.backPropagate();
+			}
+		}
+		
+		NN.store( strWeights.c_str() );
+				
+	}
+	
     return 0;
 };
 
