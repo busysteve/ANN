@@ -442,13 +442,13 @@ struct NeuralNet
 		
 		Layer<double>* layer = _inLayer;
 
-		while( layer->nextLayer != NULL )
+		while( layer->nextLayer != NULL || layer == _outLayer )
 		{
 			XMLTag &refLayer = xml.addTag( "layer" );
 			
 			if( layer == _inLayer )
 				refLayer.setAttribute( "name", "input_layer" );
-			else if( layer == _inLayer )
+			else if( layer == _outLayer )
 				refLayer.setAttribute( "name", "output_layer" );
 			else
 				refLayer.setAttribute( "name", "hidden_layer" );
@@ -473,18 +473,24 @@ struct NeuralNet
 						
 			XMLTag &refNodes = refLayer.addTag( "nodes" );
 			
-			for( int n=0; n < _inLayer->nodes.size(); n++ )
+			for( int n=0; n < layer->nodes.size(); n++ )
 			{
 				XMLTag &refNode = refNodes.addTag( "node" );
 				
-				XMLTag &refConnections = refNode.addTag( "connections" );
-
-				for( int c=0; c < _inLayer->nodes[n]->conns.size(); c++ )
+				if( layer != _outLayer )
 				{
-					XMLTag &refConnection = refConnections.addTag( "connection" );
-					refConnection.addTag( "weight", _inLayer->nodes[n]->conns[c]->weight );
+					XMLTag &refConnections = refNode.addTag( "connections" );
+
+					for( int c=0; c < layer->nodes[n]->conns.size(); c++ )
+					{
+						XMLTag &refConnection = refConnections.addTag( "connection" );
+						refConnection.addTag( "weight", layer->nodes[n]->conns[c]->weight );
+					}
 				}
 			}
+			
+			if( layer == _outLayer )
+				break;
 			
 			layer = layer->nextLayer;
 		}
@@ -519,10 +525,10 @@ struct NeuralNet
 		{
 			XMLTag &xNodes = NNxml[layer]["nodes"];
 
-			for( int node=0; node<xNodes.count(); node++ )
+			for( int node=0; node<xNodes.count()-1; node++ )
 			{
 				XMLTag &xConnections = xNodes[node]["connections"];
-				
+			
 				for( int conn=0; conn<xConnections.count(); conn++ )
 					layers[layer]->nodes[node]->conns[conn]->weight = xConnections[conn]["weight"].floatValue();
 			}
@@ -627,8 +633,6 @@ int main( int argc, char**argv)
 		
     }
 	
-	int ic = NN.getInputNodeCount();
-	int oc = NN.getOutputNodeCount();
 	
 	
 	if( t_fp != NULL )
@@ -637,6 +641,9 @@ int main( int argc, char**argv)
 		for( int x=0; x < training_iterations; x++ )
 		{
 			fseek( t_fp, 0, SEEK_SET );
+			
+			int ic = NN.getInputNodeCount();
+			int oc = NN.getOutputNodeCount();
 			
 			while( !feof(t_fp) )
 			{
@@ -680,6 +687,9 @@ int main( int argc, char**argv)
 	{
 		fseek( i_fp, 0, SEEK_SET );
 		
+		int ic = NN.getInputNodeCount();
+		int oc = NN.getOutputNodeCount();
+
 		while( !feof(i_fp) )
 		{
 			// Cycle inputs
@@ -698,7 +708,9 @@ int main( int argc, char**argv)
 			{
 				double val;	
 				//fscanf( t_fp, "%lf", &val );
-				fscanf( i_fp, "%l1.0f", &val );
+				//fscanf( i_fp, "%l1.0f", &val );
+				
+				val = NN.getOutput( t );
 				
 				//printf( "O%d=%lf ", t, val );
 				
