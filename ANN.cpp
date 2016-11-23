@@ -1,5 +1,21 @@
 
-// g++ -g -o ann ANN.cpp
+// g++ -g -o ann ANN.cpp XMLTag/xmltag.cpp
+// ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -x 10 -i input.txt -l S2 S3 S2 S1
+
+/* train.txt
+0 0 0
+0 1 1
+1 0 1
+1 1 0
+*/
+
+/* input.txt
+0 0
+0 1
+1 0
+1 1
+*/
+
 
 #include <iostream>
 #include <vector>
@@ -10,6 +26,8 @@
 #include <ctime>
 #include "XMLTag/xmltag.h"
 
+
+#define log //printf
 
 const void* nullptr = NULL;
 
@@ -57,7 +75,6 @@ T derivTanh( T n )
 template<typename T>
 struct Node;
 
-#define log printf
 
 template<typename T>
 struct Connection
@@ -472,7 +489,16 @@ struct NeuralNet
 		
 		xml.store( fileName.c_str() );
 	}
-};
+	
+
+	void load( std::string fileName )
+	{
+		XMLTag xml;
+		
+		xml.load( fileName );
+		
+		//for( int i = 0; i < 
+	}};
 
 
 int main( int argc, char**argv)
@@ -480,8 +506,8 @@ int main( int argc, char**argv)
 
     if( argc < 3 )
     {
-		printf("\nusage: ann -w [(r/w)weights (restore) file name] { -t training_file -r learn_rate -m momentum -l [Layer spec] }\n");
-        printf("\nexample: ./ann -w saved.weights.xml -r 0.002 -m 0.02 -l S2 S3 S2 L1\n\n");
+		printf("\nusage: ann -w [(r/w)weights (restore) file name] [-i input file ] { -t training_file -x training_iterations -r learn_rate -m momentum -l [Layer spec] }\n");
+        printf("\nexample: ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -x 10 -i input.txt -l S2 S3 S2 S1\n\n");
 		printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );	
 
         exit(1);
@@ -489,10 +515,10 @@ int main( int argc, char**argv)
 
 	srand( time(NULL) );
     
-	std::string strTrainingFile, strWeights ( "temp.weights.xml" );
+	std::string strTrainingFile, strInputFile, strWeights ( "temp.weights.xml" );
 	double lr=0.0, mo=0.0;
     int i = 1, training_iterations=1;
-	FILE *t_fp = NULL;
+	FILE *t_fp = NULL, *i_fp = NULL;
 
     NeuralNet<double> NN;
 
@@ -505,13 +531,19 @@ int main( int argc, char**argv)
                 strWeights = argv[i];
 				++i;
                 break;
-            case 't':
+            case 'i':
+                ++i;
+                strInputFile = argv[i];
+				++i;
+				i_fp = fopen( strInputFile.c_str(), "r" );
+                break;
+             case 't':
                 ++i;
                 strTrainingFile = argv[i];
 				++i;
 				t_fp = fopen( strTrainingFile.c_str(), "r" );
                 break;
-            case 'i':
+            case 'x':
                 ++i;
                 training_iterations = atoi( argv[i] );
 				++i;
@@ -585,7 +617,7 @@ int main( int argc, char**argv)
 					fscanf( t_fp, "%lf", &val );
 					NN.setInput( t, val );
 					
-					printf( "I%d=%lf ", t, val );
+					//printf( "I%d=%lf ", t, val );
 				}
 				NN.cycle();
 
@@ -594,18 +626,55 @@ int main( int argc, char**argv)
 				{
 					double val;	
 					fscanf( t_fp, "%lf", &val );
-					printf( "O%d=%lf ", t, val );
+					//printf( "O%d=%lf ", t, val );
 					NN.backPushTargets( val );  
 					
 
 				}
 				NN.backPropagate();
 				
-				printf( "\n" );
+				//printf( "\n" );
 			}
 		}
 		
 		NN.store( strWeights.c_str() );
+				
+	}
+	
+	if( i_fp != NULL )
+	{
+		fseek( t_fp, 0, SEEK_SET );
+		
+		while( !feof(t_fp) )
+		{
+			// Cycle inputs
+			for( int t=0; t < ic; t++ )
+			{
+				double val;	
+				fscanf( t_fp, "%lf", &val );
+				NN.setInput( t, val );
+				
+				//printf( "I%d=%lf ", t, val );
+			}
+			NN.cycle();
+
+			// Set targets for back propagation (training)
+			for( int t=0; t < oc; t++ )
+			{
+				double val;	
+				//fscanf( t_fp, "%lf", &val );
+				fscanf( t_fp, "%l1.0f", &val );
+				
+				//printf( "O%d=%lf ", t, val );
+				
+				if( t > 0 )
+					printf( " " );
+				
+				printf( "%lf", val );
+			}
+			
+			printf( "\n" );
+		}
 				
 	}
 	
