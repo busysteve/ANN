@@ -33,8 +33,14 @@
 
 const void* nullptr = NULL;
 
-enum ActType{ linear = 0, sigmoid, tangenth, cubed, naturalLog };
+enum ActType{ linear = 0, sigmoid, tangenth, bias };
 
+
+template<typename T>
+T actBias( T n )
+{
+    return (T)1.0;
+}
 
 template<typename T>
 T actLinear( T n )
@@ -54,6 +60,7 @@ T actTanh( T n )
     return tanh( n );
 }
 
+
 template<typename T>
 T derivLinear( T n )
 {
@@ -70,6 +77,13 @@ template<typename T>
 T derivTanh( T n )
 {
     return 1.0 - n * n;
+}
+
+template<typename T>
+T safeguard( T n )
+{
+    return n;
+    //return n != 0.0 ? n : 0.0000000000001;
 }
 
 
@@ -112,6 +126,7 @@ struct Node
     T inSum, lastOut;
     T deltaErr;
     T grad;
+    bool _bias;
 
 	std::vector<Connection<T>*> conns;
 	std::vector<Connection<T>*> inConns;
@@ -122,10 +137,10 @@ struct Node
 
     ActFunc _actFunc;
 
-    Node( ActFunc actFunc ) : 
+    Node( ActFunc actFunc, bool bias = false ) : 
         inSum((T)0.0), lastOut((T)0.0), 
         deltaErr((T)0.0), grad((T)1.0), 
-        _actFunc(actFunc) {}
+        _actFunc(actFunc), _bias(bias) {}
 
 	void input( T in )
     {
@@ -154,7 +169,7 @@ struct Node
         {
             for( int i=0; i < conns.size(); i++ )
             {
-                conns[i]->xmit( _actFunc( out ) );
+                conns[i]->xmit( safeguard<T>( _actFunc( out ) ) );
             }
             log( " *[%0.3f|%0.3f]", out, grad );
         }
@@ -183,7 +198,7 @@ struct Layer
 
     int count;
 
-    Layer( int n, ActType act ) 
+    Layer( int n, ActType act, bool bias = true ) 
         : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act)
     {
         for( int i=0; i < count; i++ )
@@ -202,9 +217,18 @@ struct Layer
             {
                 nodes.push_back( new Node<T>( actTanh<T> ) );
                 _derivActFunc = derivTanh<T>;
-            }            
+            }       
+     
+
         }
+
+        if( bias == true )
+        {
+            nodes.push_back( new Node<T>( actBias<T> ) );
+            _derivActFunc = actBias<T>;
+        }            
     }
+
 
     void bindLayer( Layer<T>* layer )
     {
@@ -231,7 +255,7 @@ struct Layer
             for( i=nodes.size()-1; i>=0; i-- )
             {
                 outGrad =  ( targets[i] - nodes[i]->lastOut );
-                nodes[i]->grad = outGrad * _derivActFunc( targets[i] );
+                nodes[i]->grad = outGrad * safeguard<T>( _derivActFunc( targets[i] ) );
                 log(" @{%f}\n", nodes[i]->grad );
             }
         }
@@ -377,14 +401,14 @@ struct NeuralNet
     int getInputNodeCount()
     {
 		if( _inLayer != NULL )
-			return _inLayer->nodes.size();
+			return _inLayer->count;
 		return 0;
     }
 
     int getOutputNodeCount()
     {
 		if( _outLayer != NULL )
-			return _outLayer->nodes.size();
+			return _outLayer->count;
 		return 0;
     }
 
@@ -462,6 +486,10 @@ struct NeuralNet
             {
 				activation = "tangenth";
             }
+            else if( act == bias )
+            {
+				activation = "bias";
+            }
             
 			refLayer.setAttribute( "activation", activation );
 						
@@ -470,6 +498,8 @@ struct NeuralNet
 			for( int n=0; n < layer->nodes.size(); n++ )
 			{
 				XMLTag &refNode = refNodes.addTag( "node" );
+
+                refNode.setAttribute( "bias", layer->nodes[n]->_bias );
 				
 				if( layer != _outLayer )
 				{
@@ -512,6 +542,8 @@ struct NeuralNet
 				addLayer( xNodes.count(), sigmoid );
 			else if( activation[0] == 't' )
 				addLayer( xNodes.count(), tangenth );
+			else if( activation[0] == 'b' )
+				addLayer( xNodes.count(), bias );
 		}
 		
 		try
@@ -651,24 +683,24 @@ int main( int argc, char**argv)
 					if( EOF == fscanf( t_fp, "%lf", &val ) )
                         break;
 					NN.setInput( t, val );
-					//printf( "I%d=%lf ", t, val );
+					printf( "I%d=%lf ", t, val );
 				}
 				NN.cycle();
 
 				// Set targets for back propagation (training)
 				for( int t=0; t < oc; t++ )
 				{
-					double val;	
+					double val, out = NN.getOutput( t );	
 					if( EOF == fscanf( t_fp, "%lf", &val ) )
                         break;
-					//printf( "O%d=%lf ", t, val );
+					printf( "O%d=%lf [%f]", t, val, out );
 					NN.backPushTargets( val );  
 					
 
 				}
 				NN.backPropagate();
 				
-				//printf( "\n" );
+				printf( "\n" );
 			}
 		}
 		
