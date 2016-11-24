@@ -163,7 +163,7 @@ struct Node
 
     void activate()
     {
-        T out = inSum;
+        T out = _bias ? (T)1.0 : inSum;
 
         if( !conns.empty() )
         {
@@ -193,38 +193,45 @@ struct Layer
     ActType _activation;
 
     typedef T ( *derivActFunc )(T);
+    typedef T ( *actFunc )(T);
 
     derivActFunc _derivActFunc;
+    actFunc _actFunc;
+
+    bool _bias;
 
     int count;
 
     Layer( int n, ActType act, bool bias = true ) 
-        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act)
+        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias)
     {
+
+
         for( int i=0; i < count; i++ )
         {
             if( act == linear )
             {
-                nodes.push_back( new Node<T>( actLinear<T> ) );
+                _actFunc = actLinear<T>;
                 _derivActFunc = derivLinear<T>;
             }
             else if( act == sigmoid )
             {
-                nodes.push_back( new Node<T>( actSigmoid<T> ) );
+                _actFunc = actSigmoid<T>;
                 _derivActFunc = derivSigmoid<T>;
             }
             else if( act == tangenth )
             {
-                nodes.push_back( new Node<T>( actTanh<T> ) );
+                _actFunc = actTanh<T>;
                 _derivActFunc = derivTanh<T>;
             }       
      
+            nodes.push_back( new Node<T>( _actFunc ) );
 
         }
 
         if( bias == true )
         {
-            nodes.push_back( new Node<T>( actBias<T> ) );
+            nodes.push_back( new Node<T>( actBias<T>, true ) );
             _derivActFunc = actBias<T>;
         }            
     }
@@ -235,7 +242,7 @@ struct Layer
         nextLayer = layer;
         nextLayer->prevLayer = this;
 
-        for( int i=0; i<count; i++ )
+        for( int i=0; i<nodes.size(); i++ )
         {
             for( int j=0; j < layer->count; j++ )
             {
@@ -371,12 +378,14 @@ struct NeuralNet
 		_momentum = mo;
 	}
 	
-    void addLayer( int n, ActType act )
+    Layer<T>* addLayer( int n, ActType act, bool bias )
     {
         if( n < 1 )
-            return;
+            return NULL;
 
-        layers.push_back( new Layer<T>(n, act ) );
+        Layer<T>* pl;
+
+        layers.push_back( pl = new Layer<T>(n, act, bias ) );
 
         int size = layers.size();
 
@@ -389,6 +398,8 @@ struct NeuralNet
         {
             _inLayer = layers[0];
         }
+    
+        return pl;
     }    
 
     
@@ -486,12 +497,9 @@ struct NeuralNet
             {
 				activation = "tangenth";
             }
-            else if( act == bias )
-            {
-				activation = "bias";
-            }
             
 			refLayer.setAttribute( "activation", activation );
+			refLayer.setAttribute( "bias", layer->_bias );
 						
 			XMLTag &refNodes = refLayer.addTag( "nodes" );
 			
@@ -532,18 +540,23 @@ struct NeuralNet
 		for( int layer = 0; layer < NNxml.count(); layer++ )
 		{
 			std::string activation = NNxml[layer].attribute( "activation" );
-	
+			bool bias = NNxml[layer].boolAttribute( "bias" );
+
 			XMLTag &xNodes = NNxml[layer]["nodes"];
+            Layer<T> *pLayer = NULL;
+
+            int count = xNodes.count();
+
+            if( bias )
+                count--;
 
 			// Add Layer - with nodes
 			if( activation[0] == 'l' )
-				addLayer( xNodes.count(), linear );
+				pLayer = addLayer( count, linear, bias );
 			else if( activation[0] == 's' )
-				addLayer( xNodes.count(), sigmoid );
+				pLayer = addLayer( count, sigmoid, bias );
 			else if( activation[0] == 't' )
-				addLayer( xNodes.count(), tangenth );
-			else if( activation[0] == 'b' )
-				addLayer( xNodes.count(), bias );
+				pLayer = addLayer( count, tangenth, bias );
 		}
 		
 		try
@@ -584,6 +597,7 @@ int main( int argc, char**argv)
 	double lr=0.0, mo=0.0;
     int i = 1, training_iterations=1;
 	FILE *t_fp = NULL, *i_fp = NULL;
+    bool bias = false;
 
     NeuralNet<double> NN;
 
@@ -601,6 +615,10 @@ int main( int argc, char**argv)
                 strInputFile = argv[i];
 				++i;
 				i_fp = fopen( strInputFile.c_str(), "r" );
+                break;
+            case 'b':
+                ++i;
+                bias = true;
                 break;
              case 't':
                 ++i;
@@ -638,18 +656,18 @@ int main( int argc, char**argv)
 						switch( argv[i][0] )
 						{
 							case 'L':
-								NN.addLayer( atoi( &argv[i][1] ), linear );
+								NN.addLayer( atoi( &argv[i][1] ), linear, bias );
 								break;
 							case 'S':
-								NN.addLayer( atoi( &argv[i][1] ), sigmoid );
+								NN.addLayer( atoi( &argv[i][1] ), sigmoid, bias );
 								break;
 							case 'T':
-								NN.addLayer( atoi( &argv[i][1] ), tangenth );
+								NN.addLayer( atoi( &argv[i][1] ), tangenth, bias );
 								break;
 							case '-':
 								break;
 							default:
-								printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
+								printf( "Layer types must be L, S or T prefixed to the Node count.\n" );
 								exit(1);
 						}
 					}
