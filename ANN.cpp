@@ -29,7 +29,7 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log //printf
+#define log // printf
 
 const void* nullptr = NULL;
 
@@ -93,11 +93,6 @@ struct Connection
         weight = ( rnd * (T)1.5 ) - ( (T)1.5 / (T)2.0 );
     }
 
-    void loadweight( FILE *fp )
-    {
-        fscanf( fp, "%lf", &weight );
-    }
-
 	void xmit( T in )
 	{
 		if( toNode != nullptr )
@@ -106,7 +101,6 @@ struct Connection
             log( " <%0.3f|%0.3f>(%f)\n", in, weight, in*weight );
         }
 	}
-
 
 };
 
@@ -520,19 +514,22 @@ struct NeuralNet
 				addLayer( xNodes.count(), tangenth );
 		}
 		
-		
-		for( int layer = 0; layer < NNxml.count(); layer++ )
-		{
-			XMLTag &xNodes = NNxml[layer]["nodes"];
+		try
+        {
+	        for( int layer = 0; layer < NNxml.count(); layer++ )
+	        {
+		        XMLTag &xNodes = NNxml[layer]["nodes"];
 
-			for( int node=0; node<xNodes.count()-1; node++ )
-			{
-				XMLTag &xConnections = xNodes[node]["connections"];
-			
-				for( int conn=0; conn<xConnections.count(); conn++ )
-					layers[layer]->nodes[node]->conns[conn]->weight = xConnections[conn]["weight"].floatValue();
-			}
-		}
+		        for( int node=0; node<xNodes.count(); node++ )
+		        {
+			        XMLTag &xConnections = xNodes[node]["connections"];
+		
+			        for( int conn=0; conn<xConnections.count(); conn++ )
+				        layers[layer]->nodes[node]->conns[conn]->weight = xConnections[conn]["weight"].floatValue();
+		        }
+	        }
+        }
+        catch(...){}
 	}
 };
 
@@ -651,9 +648,9 @@ int main( int argc, char**argv)
 				for( int t=0; t < ic; t++ )
 				{
 					double val;	
-					fscanf( t_fp, "%lf", &val );
+					if( EOF == fscanf( t_fp, "%lf", &val ) )
+                        break;
 					NN.setInput( t, val );
-					
 					//printf( "I%d=%lf ", t, val );
 				}
 				NN.cycle();
@@ -662,7 +659,8 @@ int main( int argc, char**argv)
 				for( int t=0; t < oc; t++ )
 				{
 					double val;	
-					fscanf( t_fp, "%lf", &val );
+					if( EOF == fscanf( t_fp, "%lf", &val ) )
+                        break;
 					//printf( "O%d=%lf ", t, val );
 					NN.backPushTargets( val );  
 					
@@ -685,7 +683,7 @@ int main( int argc, char**argv)
 	
 	if( i_fp != NULL )
 	{
-		fseek( i_fp, 0, SEEK_SET );
+		//fseek( i_fp, 0, SEEK_SET );
 		
 		int ic = NN.getInputNodeCount();
 		int oc = NN.getOutputNodeCount();
@@ -696,10 +694,11 @@ int main( int argc, char**argv)
 			for( int t=0; t < ic; t++ )
 			{
 				double val;	
-				fscanf( i_fp, "%lf", &val );
+				if( EOF == fscanf( i_fp, "%lf", &val ) )
+                    return 1;
 				NN.setInput( t, val );
 				
-				//printf( "I%d=%lf ", t, val );
+				printf( "I%d=%lf ", t, val );
 			}
 			NN.cycle();
 
@@ -712,12 +711,12 @@ int main( int argc, char**argv)
 				
 				val = NN.getOutput( t );
 				
-				//printf( "O%d=%lf ", t, val );
+				printf( "O%d=%lf ", t, val );
 				
 				if( t > 0 )
 					printf( " " );
 				
-				printf( "%lf", val );
+				//printf( "%lf", val );
 			}
 			
 			printf( "\n" );
