@@ -29,7 +29,7 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log // printf
+#define log //printf
 
 const void* nullptr = NULL;
 
@@ -111,8 +111,8 @@ struct Connection
 	{
 		if( toNode != nullptr )
         {
-			toNode->input( in*weight ); // Apply weight here
-            log( " <%0.3f|%0.3f>(%f)\n", in, weight, in*weight );
+			toNode->input( in * weight ); // Apply weight here
+            log( " <%0.3f|%0.3f>(%0.3f)\n", in, weight, in*weight );
         }
 	}
 
@@ -144,12 +144,13 @@ struct Node
 
     void input( T in )
     {
-        inSum += in; // Sum weighted inputs for activation
+        lastOut = inSum +=  in; // Sum weighted inputs for activation
+        log( "{%0.3f}SUM(%0.3f) ", in, inSum );
     }
 
     T out()
     {
-        return lastOut;
+        return ( lastOut );
     }
 
     // Node to bind to (next layer node)
@@ -163,21 +164,22 @@ struct Node
 
     void activate()
     {
-        T out = _bias ? (T)1.0 : inSum;
+        lastOut = _actFunc( inSum );
 
+    }
+
+    void cycle()
+    {
         if( !conns.empty() )
         {
             for( int i=0; i < conns.size(); i++ )
             {
-                conns[i]->xmit( safeguard<T>( _actFunc( out ) ) );
+                conns[i]->xmit( lastOut );
             }
-            log( " *[%0.3f|%0.3f]", out, grad );
         }
 
-        lastOut = out;
-
+        log( "(%f)-----------------------(%f)\n", inSum, lastOut );
         inSum = (T)0.0;
-       
     }
 
 };
@@ -206,27 +208,26 @@ struct Layer
         : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias)
     {
 
+        if( act == linear )
+        {
+            _actFunc = actLinear<T>;
+            _derivActFunc = derivLinear<T>;
+        }
+        else if( act == sigmoid )
+        {
+            _actFunc = actSigmoid<T>;
+            _derivActFunc = derivSigmoid<T>;
+        }
+        else if( act == tangenth )
+        {
+            _actFunc = actTanh<T>;
+            _derivActFunc = derivTanh<T>;
+        }       
+
 
         for( int i=0; i < count; i++ )
-        {
-            if( act == linear )
-            {
-                _actFunc = actLinear<T>;
-                _derivActFunc = derivLinear<T>;
-            }
-            else if( act == sigmoid )
-            {
-                _actFunc = actSigmoid<T>;
-                _derivActFunc = derivSigmoid<T>;
-            }
-            else if( act == tangenth )
-            {
-                _actFunc = actTanh<T>;
-                _derivActFunc = derivTanh<T>;
-            }       
-     
+        {     
             nodes.push_back( new Node<T>( _actFunc ) );
-
         }
 
         if( bias == true )
@@ -254,8 +255,8 @@ struct Layer
 
     T calcError( std::vector<T> &targets )
     {
-        T netErr, delta;
-        int nc = nodes.size()-1; // minus bias
+        T netErr = (T)0.0, delta;
+        int nc = nodes.size()-(_bias?1:0); // minus bias
         for( int i=0; i<nc; i++ )
         {
             delta = targets[i] - nodes[i]->lastOut;
@@ -273,7 +274,7 @@ struct Layer
         if( nextLayer == NULL ) // output layer
         {
             T delta;
-            int nc = nodes.size()-1; // minus bias
+            int nc = nodes.size()-(_bias?1:0); // minus bias
             for( i=0; i<nc; i++ )
             {
                 delta =  ( targets[i] - nodes[i]->lastOut );
@@ -283,7 +284,7 @@ struct Layer
         }
         else
         {
-            int nc = nodes.size()-1; // minus bias
+            int nc = nodes.size()-(_bias?1:0); // minus bias
             for( int n=0; n<nc; n++ )
             {
                 T sum = 0.0;
@@ -318,8 +319,6 @@ struct Layer
                     out = nodes[i]->lastOut;
                     //weight = nodes[i]->inConns[c]->weight;
 
-                    //delta = learnRate * grad * out + momentum * delta;
-                    //delta = momentum * delta + learnRate * grad * out;
                     delta = learnRate * grad * out + momentum * delta;
 
                     nodes[i]->inConns[c]->delta = delta;
@@ -334,15 +333,26 @@ struct Layer
 
     void activate()
     {
-        log("\n");
-
-        for( int i=0; i<count; i++ )
+        for( int i=nodes.size()-1; i>=0; i-- )
         {
             nodes[i]->activate();
         }
+    }
+
+    void cycle()
+    {
+        log("\n");
+
+        for( int i=nodes.size()-1; i>=0; i-- )
+        {
+            nodes[i]->cycle();
+        }
 
         if( nextLayer != NULL )
+        {
             nextLayer->activate();
+            nextLayer->cycle();
+        }
 
         log("\n");
     }
@@ -436,7 +446,7 @@ struct NeuralNet
     {
 
         // Start activation recursion
-        _inLayer->activate();
+        _inLayer->cycle();
 
     }
 
