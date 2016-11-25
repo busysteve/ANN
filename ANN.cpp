@@ -142,7 +142,7 @@ struct Node
         deltaErr((T)0.0), grad((T)1.0), 
         _actFunc(actFunc), _bias(bias) {}
 
-	void input( T in )
+    void input( T in )
     {
         inSum += in; // Sum weighted inputs for activation
     }
@@ -259,7 +259,7 @@ struct Layer
         if( nextLayer == NULL ) // output layer
         {
             T outGrad;
-            for( i=nodes.size()-1; i>=0; i-- )
+            for( i=nodes.size()-2; i>=0; i-- )
             {
                 outGrad =  ( targets[i] - nodes[i]->lastOut );
                 nodes[i]->grad = outGrad * safeguard<T>( _derivActFunc( targets[i] ) );
@@ -268,18 +268,22 @@ struct Layer
         }
         else
         {
-            for( int n = nodes.size()-1; n >= 0; n-- ) 
+            for( int h=nodes.size()-1; h>=0; h-- )
             {
+                Layer<T>* layer = nextLayer;
                 T sum = 0.0;
-                for( int c = nodes[n]->conns.size()-1; c >= 0; c-- ) 
+                for( int n = layer->nodes.size()-2; n >= 0; n-- ) 
                 {
-                        T nextGrad = nodes[n]->conns[c]->toNode->grad;
-                        sum += ( nodes[n]->conns[c]->weight ) * nextGrad;
+                    for( int c = layer->nodes[n]->conns.size()-2; c >= 0; c-- ) 
+                    {
+                            T nextGrad = layer->nodes[n]->conns[c]->toNode->grad;
+                            sum += ( layer->nodes[n]->conns[c]->weight ) * nextGrad;
+                    }
+
+
+                    log(" {%f}\n", sum );
                 }
-
-                nodes[n]->grad = sum;
-
-                log(" {%f}\n", sum );
+                nodes[h]->grad = sum;
             }
         }
 
