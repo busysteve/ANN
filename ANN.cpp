@@ -29,7 +29,7 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log // printf
+#define log printf
 
 
 const void* nullptr = NULL;
@@ -305,7 +305,7 @@ struct Layer
 
         if( prevLayer != NULL )
             //if( prevLayer->prevLayer != NULL )
-                prevLayer->calcGradient(targets); // target not usedin the following calls
+                prevLayer->calcGradient(targets); // target not used in the following calls
     }
 
     void updateWeights( T learnRate, T momentum )
@@ -606,6 +606,7 @@ int main( int argc, char**argv)
     int i = 1, training_iterations=1;
 	FILE *t_fp = NULL, *i_fp = NULL;
     bool bias = false;
+    bool cont = false;
 
     NeuralNet<double> NN;
 
@@ -628,7 +629,11 @@ int main( int argc, char**argv)
                 ++i;
                 bias = true;
                 break;
-             case 't':
+            case 'c':
+                ++i;
+                cont = true;
+                break;
+            case 't':
                 ++i;
                 strTrainingFile = argv[i];
 				++i;
@@ -688,8 +693,7 @@ int main( int argc, char**argv)
 		
     }
 	
-	
-	
+
 	if( t_fp != NULL )
 	{
 		
