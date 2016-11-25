@@ -29,12 +29,19 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log //printf
+#define log // printf
+
 
 const void* nullptr = NULL;
 
 enum ActType{ linear = 0, sigmoid, tangenth, bias };
 
+
+template<typename T>
+T actPass( T n )
+{
+    return n;
+}
 
 template<typename T>
 T actBias( T n )
@@ -104,7 +111,7 @@ struct Connection
     {
         T rnd = (T)std::rand() / RAND_MAX;
 
-        weight = ( rnd * (T)1.5 ) - ( (T)1.5 / (T)2.0 );
+        weight = rnd + 0.000000001;
     }
 
 	void xmit( T in )
@@ -144,7 +151,7 @@ struct Node
 
     void input( T in )
     {
-        lastOut = inSum +=  in; // Sum weighted inputs for activation
+        inSum += in; // Sum weighted inputs for activation
         log( "{%0.3f}SUM(%0.3f) ", in, inSum );
     }
 
@@ -162,14 +169,11 @@ struct Node
 
     }
 
-    void activate()
-    {
-        lastOut = _actFunc( inSum );
-
-    }
 
     void cycle()
     {
+        lastOut = _actFunc( inSum );
+
         if( !conns.empty() )
         {
             for( int i=0; i < conns.size(); i++ )
@@ -344,15 +348,10 @@ struct Layer
         log("\n");
 
         for( int i=nodes.size()-1; i>=0; i-- )
-        {
             nodes[i]->cycle();
-        }
 
         if( nextLayer != NULL )
-        {
-            nextLayer->activate();
             nextLayer->cycle();
-        }
 
         log("\n");
     }
