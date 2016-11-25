@@ -251,39 +251,50 @@ struct Layer
         }
     }
 
-    
+
+    T calcError( std::vector<T> &targets )
+    {
+        T netErr, delta;
+        int nc = nodes.size()-1; // minus bias
+        for( int i=0; i<nc; i++ )
+        {
+            delta = targets[i] - nodes[i]->lastOut;
+            netErr +=  ( delta * delta );  // TODO: Handle more targets
+        }
+        netErr /= (T)nc;
+        netErr = sqrt( netErr );
+
+        return netErr;
+    }
 
     void calcGradient( std::vector<T> &targets )
     {
         int i;
         if( nextLayer == NULL ) // output layer
         {
-            T outGrad;
-            for( i=nodes.size()-2; i>=0; i-- )
+            T delta;
+            int nc = nodes.size()-1; // minus bias
+            for( i=0; i<nc; i++ )
             {
-                outGrad =  ( targets[i] - nodes[i]->lastOut );
-                nodes[i]->grad = outGrad * safeguard<T>( _derivActFunc( targets[i] ) );
+                delta =  ( targets[i] - nodes[i]->lastOut );
+                nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
                 log(" @{%f}\n", nodes[i]->grad );
             }
         }
         else
         {
-            for( int h=nodes.size()-1; h>=0; h-- )
+            int nc = nodes.size()-1; // minus bias
+            for( int n=0; n<nc; n++ )
             {
-                Layer<T>* layer = nextLayer;
                 T sum = 0.0;
-                for( int n = layer->nodes.size()-2; n >= 0; n-- ) 
+                for( int c = nodes[n]->conns.size()-1; c >= 0; c-- ) 
                 {
-                    for( int c = layer->nodes[n]->conns.size()-2; c >= 0; c-- ) 
-                    {
-                            T nextGrad = layer->nodes[n]->conns[c]->toNode->grad;
-                            sum += ( layer->nodes[n]->conns[c]->weight ) * nextGrad;
-                    }
-
-
-                    log(" {%f}\n", sum );
+                        T grad = nodes[n]->conns[c]->toNode->grad;
+                        sum += ( nodes[n]->conns[c]->weight ) * grad;
                 }
-                nodes[h]->grad = sum;
+
+                log(" {%f}\n", sum );
+                nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
             }
         }
 
@@ -302,39 +313,23 @@ struct Layer
             {
                 for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- ) 
                 {
-                    alpha = nodes[i]->inConns[c]->alpha;
                     delta = nodes[i]->inConns[c]->delta;
                     grad = nodes[i]->grad;
                     out = nodes[i]->lastOut;
                     //weight = nodes[i]->inConns[c]->weight;
 
                     //delta = learnRate * grad * out + momentum * delta;
-                    delta = momentum * delta + learnRate * grad * out;
+                    //delta = momentum * delta + learnRate * grad * out;
+                    delta = learnRate * grad * out + momentum * delta;
 
                     nodes[i]->inConns[c]->delta = delta;
-                    weight = (nodes[i]->inConns[c]->weight += delta); 
-                    nodes[i]->inConns[c]->alpha = weight / delta;
+                    nodes[i]->inConns[c]->weight += delta; 
                     
                 }
             }
 
             prevLayer->updateWeights( learnRate, momentum );
         }
-    }
-
-    T calcError()
-    {
-        T netErr, outVal;
-        int nc = nodes.size();
-        for( int i=nc-1; i>=0; i-- )
-        {
-            outVal = nodes[i]->lastOut;
-            netErr +=  ( outVal * outVal );  // TODO: Handle more targets
-        }
-        netErr /= (T)nc;
-        netErr = sqrt( netErr );
-
-        return netErr;
     }
 
     void activate()
@@ -455,12 +450,12 @@ struct NeuralNet
     {
 
         // * Calc error for layers
-        _outLayer->calcError();
+        _outLayer->calcError( vecBackPrepTargets );
         
         // * Calc gradients recursively
         _outLayer->calcGradient( vecBackPrepTargets );
 
-        // Update weights
+        // Update weights recursively
         _outLayer->updateWeights( _learnRate, _momentum );
 
         //T outVal = _outLayer->nodes[0]->lastOut;
