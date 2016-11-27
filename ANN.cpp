@@ -29,7 +29,7 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log //printf
+#define log // printf
 
 
 const void* nullptr = NULL;
@@ -286,12 +286,12 @@ struct Layer
         if( nextLayer == NULL ) // output layer
         {
             T delta;
-            int nc = nodes.size()-1;//(_bias?1:0); // minus bias
+            int nc = nodes.size()-(_bias?1:0); // minus bias
             for( i=0; i<nc; i++ )
             {
                 delta =  ( targets[i] - nodes[i]->lastOut );
 
-                nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
+                nodes[i]->grad = delta * _derivActFunc( sumIn );
                 log(" @{%f}\n", nodes[i]->grad );
             }
         }
@@ -307,8 +307,8 @@ struct Layer
                         sum += ( nodes[n]->conns[c]->weight ) * grad;
                 }
 
-                log(" {%f}\n", sum );
-                nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
+                nodes[n]->grad = sum * _derivActFunc( sumIn );
+                log(" {%f:%f:%f}\n", sum, sumIn, nodes[n]->grad );
             }
         }
 
