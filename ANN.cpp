@@ -29,7 +29,7 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log printf
+#define log //printf
 
 
 const void* nullptr = NULL;
@@ -94,6 +94,9 @@ T safeguard( T n )
 }
 
 
+
+template<typename T>
+struct Layer;
 
 template<typename T>
 struct Node;
@@ -170,7 +173,7 @@ struct Node
     }
 
 
-    void cycle()
+    T cycle( )
     {
         lastOut = _actFunc( inSum );
 
@@ -184,6 +187,8 @@ struct Node
 
         log( "(%f)-----------------------(%f)\n", inSum, lastOut );
         inSum = (T)0.0;
+
+        return lastOut;
     }
 
 };
@@ -208,8 +213,11 @@ struct Layer
 
     int count;
 
+    T sumIn;
+
     Layer( int n, ActType act, bool bias = true ) 
-        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias)
+        : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias),
+            sumIn(0.0)
     {
 
         if( act == linear )
@@ -263,7 +271,7 @@ struct Layer
         int nc = nodes.size()-(_bias?1:0); // minus bias
         for( int i=0; i<nc; i++ )
         {
-            delta = targets[i] - nodes[i]->lastOut;
+            delta = targets[i] - nodes[i]->lastOut; // TODO // handle proper target count!!!!
             netErr +=  ( delta * delta );  // TODO: Handle more targets
         }
         netErr /= (T)nc;
@@ -278,10 +286,11 @@ struct Layer
         if( nextLayer == NULL ) // output layer
         {
             T delta;
-            int nc = nodes.size()-(_bias?1:0); // minus bias
+            int nc = nodes.size()-1;//(_bias?1:0); // minus bias
             for( i=0; i<nc; i++ )
             {
                 delta =  ( targets[i] - nodes[i]->lastOut );
+
                 nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
                 log(" @{%f}\n", nodes[i]->grad );
             }
@@ -343,15 +352,17 @@ struct Layer
         }
     }
 
-    void cycle()
+    void cycle(  )
     {
         log("\n");
 
+        sumIn = 0.0;
+
         for( int i=nodes.size()-1; i>=0; i-- )
-            nodes[i]->cycle();
+            sumIn += nodes[i]->cycle();
 
         if( nextLayer != NULL )
-            nextLayer->cycle();
+            nextLayer->cycle( );
 
         log("\n");
     }
@@ -386,6 +397,25 @@ struct NeuralNet
 		_momentum = mo;
 	}
 	
+    void clear()
+    {
+        for( int l=0; l<layers.size(); l++ )
+        {
+            Layer<T> *pLayer = layers[l];
+            for( int n=0; n<pLayer->nodes.size(); n++ )
+            {
+                Node<T> *node = pLayer->nodes[n];
+                for( int c=0; c<node->conns.size(); c++ )
+                {
+                    delete node->conns[c];
+                }
+                delete node;
+            }
+            delete pLayer;
+        }
+        layers.clear();
+    }
+
     Layer<T>* addLayer( int n, ActType act, bool bias )
     {
         if( n < 1 )
@@ -544,6 +574,8 @@ struct NeuralNet
 		XMLTag NNxml;
 		
 		NNxml.load( fileName.c_str() );
+
+        clear();
 		
 		for( int layer = 0; layer < NNxml.count(); layer++ )
 		{
@@ -555,8 +587,7 @@ struct NeuralNet
 
             int count = xNodes.count();
 
-            if( bias )
-                count--;
+            if( bias )  count--;
 
 			// Add Layer - with nodes
 			if( activation[0] == 'l' )
@@ -571,6 +602,7 @@ struct NeuralNet
         {
 	        for( int layer = 0; layer < NNxml.count(); layer++ )
 	        {
+                
 		        XMLTag &xNodes = NNxml[layer]["nodes"];
 
 		        for( int node=0; node<xNodes.count(); node++ )
@@ -693,6 +725,10 @@ int main( int argc, char**argv)
 		
     }
 	
+    if( cont == true )
+    {
+        NN.load( strWeights.c_str() );
+    }
 
 	if( t_fp != NULL )
 	{
@@ -703,38 +739,44 @@ int main( int argc, char**argv)
 			
 			int ic = NN.getInputNodeCount();
 			int oc = NN.getOutputNodeCount();
-			
-			while( !feof(t_fp) )
+			char *line = NULL;
+			size_t len = 0;
+			ssize_t read;
+			char *pch;
+
+			while( (read = getline(&line, &len, t_fp)) != -1 )
 			{
 				// Cycle inputs
-				for( int t=0; t < ic; t++ )
+				double val;	
+				pch = strtok (line," \t,:");
+				for( int t=0; (t < ic) && (pch != NULL); t++ )
 				{
-					double val;	
-					if( EOF == fscanf( t_fp, "%lf", &val ) )
-                        break;
+					sscanf (pch, "%lf\n",&val);
+					pch = strtok (NULL, " \t,:");
 					NN.setInput( t, val );
 					printf( "I%d=%lf ", t, val );
-				}
+				}                        
 				NN.cycle();
 
 				// Set targets for back propagation (training)
-				for( int t=0; t < oc; t++ )
+				for( int t=0; (t < ic) && (pch != NULL); t++ )
 				{
-					double val, out = NN.getOutput( t );	
-					if( EOF == fscanf( t_fp, "%lf", &val ) )
-                        break;
-					printf( "O%d=%lf [%f]", t, val, out );
+					sscanf (pch, "%lf\n",&val);
+					pch = strtok (NULL, " \t,:");
 					NN.backPushTargets( val );  
+					printf( "O%d=%lf ", t, val );
+				}                        
 					
-
-				}
 				NN.backPropagate();
+
+				printf( "[%f]", NN.getOutput(0) );
 				
 				printf( "\n" );
 			}
 		}
 		
-		NN.store( strWeights.c_str() );
+        if( cont != true )
+    		NN.store( strWeights.c_str() );
 				
 	}
 	else
@@ -760,7 +802,7 @@ int main( int argc, char**argv)
                     return 1;
 				NN.setInput( t, val );
 				
-				printf( "I%d=%lf ", t, val );
+				printf( "i%d=%lf ", t, val );
 			}
 			NN.cycle();
 
@@ -773,7 +815,7 @@ int main( int argc, char**argv)
 				
 				val = NN.getOutput( t );
 				
-				printf( "O%d=%lf ", t, val );
+				printf( "o%d=%lf ", t, val );
 				
 				if( t > 0 )
 					printf( " " );
