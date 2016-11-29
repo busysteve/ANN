@@ -29,8 +29,9 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log // printf
+#define log    printf
 
+#define MAX_NN_NAME 30
 
 const void* nullptr = NULL;
 
@@ -108,10 +109,16 @@ struct Connection
 
     T weight, alpha, delta;
 
-    Node<T> *toNode;
+    Node<T> *fromNode, *toNode;
 
-    Connection( Node<T>* node ) : toNode( node ), alpha((T)1.0), delta((T)0.0)
+    char _name[MAX_NN_NAME];
+
+    Connection( Node<T>* fNode, Node<T>* tNode ) 
+        : fromNode( fNode ), toNode( tNode ), alpha((T)1.0), delta((T)0.0)
     {
+
+        sprintf( _name, "C-%s-%s", fromNode->_name, toNode->_name );
+
         T rnd = (T)std::rand() / RAND_MAX;
 
         weight = rnd + 0.000000001;
@@ -122,7 +129,7 @@ struct Connection
 		if( toNode != nullptr )
         {
 			toNode->input( in * weight ); // Apply weight here
-            log( " <%0.3f|%0.3f>(%0.3f)\n", in, weight, in*weight );
+            log( " [%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*weight );
         }
 	}
 
@@ -138,6 +145,8 @@ struct Node
     T grad;
     bool _bias;
 
+    char _name[MAX_NN_NAME];
+
 	std::vector<Connection<T>*> conns;
 	std::vector<Connection<T>*> inConns;
     
@@ -147,15 +156,18 @@ struct Node
 
     ActFunc _actFunc;
 
-    Node( ActFunc actFunc, bool bias = false ) : 
+    Node( ActFunc actFunc, bool bias, char* name ) : 
         inSum((T)0.0), lastOut((T)0.0), 
         deltaErr((T)0.0), grad((T)1.0), 
-        _actFunc(actFunc), _bias(bias) {}
+        _actFunc(actFunc), _bias(bias) 
+    {
+        sprintf(_name, "%s", name );
+    }
 
     void input( T in )
     {
         inSum += in; // Sum weighted inputs for activation
-        log( "{%0.3f}SUM(%0.3f) ", in, inSum );
+        log( " [%s]{%0.3f}SUM(%0.3f) ", _name, in, inSum );
     }
 
     T out()
@@ -166,7 +178,7 @@ struct Node
     // Node to bind to (next layer node)
 	void bindNode( Node<T>* node )
     {
-        Connection<T>* pConn = new Connection<T>( node );
+        Connection<T>* pConn = new Connection<T>( this, node );
         conns.push_back( pConn );
         node->inConns.push_back( pConn );
 
@@ -185,7 +197,11 @@ struct Node
             }
         }
 
-        log( "(%f)-----------------------(%f)\n", inSum, lastOut );
+        if( _bias )
+            log( "[%s](in=%lf)--------- bias --------(out=%lf)\n", _name, inSum, lastOut );
+        else
+            log( "[%s](in=%lf)-----------------------(out=%lf)\n", _name, inSum, lastOut );
+ 
         inSum = (T)0.0;
 
         return lastOut;
@@ -201,6 +217,8 @@ struct Layer
     Layer<T>* prevLayer;
     Layer<T>* nextLayer;
 
+    char _name[MAX_NN_NAME];
+
     ActType _activation;
 
     typedef T ( *derivActFunc )(T);
@@ -215,10 +233,12 @@ struct Layer
 
     T sumIn;
 
-    Layer( int n, ActType act, bool bias = true ) 
+    Layer( int n, ActType act, bool bias, char* name ) 
         : count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias),
             sumIn(0.0)
     {
+
+        strcpy( _name, name );
 
         if( act == linear )
         {
@@ -238,14 +258,20 @@ struct Layer
 
 
         for( int i=0; i < count; i++ )
-        {     
-            nodes.push_back( new Node<T>( _actFunc ) );
+        {
+            char tmpname[MAX_NN_NAME];
+            sprintf(tmpname, "N%d-%s", (int)nodes.size(), _name );
+            nodes.push_back( new Node<T>( _actFunc, false, tmpname ) );
         }
 
         if( bias == true )
         {
-            nodes.push_back( new Node<T>( actBias<T>, true ) );
-            _derivActFunc = actBias<T>;
+            char tmpname[MAX_NN_NAME];
+            sprintf(tmpname, "B%d-%s", (int)nodes.size(), _name );
+            nodes.push_back( new Node<T>( _actFunc, true, tmpname ) );
+            //nodes.push_back( new Node<T>( actBias<T>, true, tmpname ) );
+            //_derivActFunc = actBias<T>;
+            //_derivActFunc = actBias<T>;
         }            
     }
 
@@ -292,7 +318,7 @@ struct Layer
                 delta =  ( targets[i] - nodes[i]->lastOut );
 
                 nodes[i]->grad = delta * _derivActFunc( sumIn );
-                log(" @{%f}\n", nodes[i]->grad );
+                log(" [%s][%s]outer{delta=%f : sumIn=%f : grad=%f}\n", _name, nodes[i]->_name, delta, sumIn, nodes[i]->grad );
             }
         }
         else
@@ -308,7 +334,7 @@ struct Layer
                 }
 
                 nodes[n]->grad = sum * _derivActFunc( sumIn );
-                log(" {%f:%f:%f}\n", sum, sumIn, nodes[n]->grad );
+                log(" [%s][%s]inner{sum=%f:sumIn=%f:grad=%f}\n", _name, nodes[n]->_name, sum, sumIn, nodes[n]->grad );
             }
         }
 
@@ -336,19 +362,11 @@ struct Layer
 
                     nodes[i]->inConns[c]->delta = delta;
                     nodes[i]->inConns[c]->weight += delta; 
-                    
+                    log(" [%s][%s]w=%f, d=%f, o=%f \n", _name, nodes[i]->inConns[c]->_name, nodes[i]->inConns[c]->weight, delta, out );
                 }
             }
 
             prevLayer->updateWeights( learnRate, momentum );
-        }
-    }
-
-    void activate()
-    {
-        for( int i=nodes.size()-1; i>=0; i-- )
-        {
-            nodes[i]->activate();
         }
     }
 
@@ -423,7 +441,11 @@ struct NeuralNet
 
         Layer<T>* pl;
 
-        layers.push_back( pl = new Layer<T>(n, act, bias ) );
+        char name[MAX_NN_NAME];
+
+        sprintf( name, "L%d", (int)layers.size() );
+
+        layers.push_back( pl = new Layer<T>(n, act, bias, name ) );
 
         int size = layers.size();
 
@@ -635,7 +657,7 @@ int main( int argc, char**argv)
     
 	std::string strTrainingFile, strInputFile, strWeights ( "temp.weights.xml" );
 	double lr=0.0, mo=0.0;
-    int i = 1, training_iterations=1;
+    int i = 1, training_iterations=1, times=1;
 	FILE *t_fp = NULL, *i_fp = NULL;
     bool bias = false;
     bool cont = false;
@@ -671,9 +693,14 @@ int main( int argc, char**argv)
 				++i;
 				t_fp = fopen( strTrainingFile.c_str(), "r" );
                 break;
-            case 'x':
+            case 'e':
                 ++i;
                 training_iterations = atoi( argv[i] );
+				++i;
+                break;
+            case 'x':
+                ++i;
+                times = atoi( argv[i] );
 				++i;
                 break;
             case 'r':
@@ -730,10 +757,10 @@ int main( int argc, char**argv)
         NN.load( strWeights.c_str() );
     }
 
-	if( t_fp != NULL )
+	if( t_fp != NULL ) // training file
 	{
 		
-		for( int x=0; x < training_iterations; x++ )
+		for( int e=0; e < training_iterations; e++ )
 		{
 			fseek( t_fp, 0, SEEK_SET );
 			
@@ -744,34 +771,42 @@ int main( int argc, char**argv)
 			ssize_t read;
 			char *pch;
 
+            char tmpline[1024];
+
 			while( (read = getline(&line, &len, t_fp)) != -1 )
 			{
 				// Cycle inputs
-				double val;	
-				pch = strtok (line," \t,:");
-				for( int t=0; (t < ic) && (pch != NULL); t++ )
-				{
-					sscanf (pch, "%lf\n",&val);
-					pch = strtok (NULL, " \t,:");
-					NN.setInput( t, val );
-					printf( "I%d=%lf ", t, val );
-				}                        
-				NN.cycle();
 
-				// Set targets for back propagation (training)
-				for( int t=0; (t < ic) && (pch != NULL); t++ )
-				{
-					sscanf (pch, "%lf\n",&val);
-					pch = strtok (NULL, " \t,:");
-					NN.backPushTargets( val );  
-					printf( "O%d=%lf ", t, val );
-				}                        
+                memcpy( tmpline, line, len+1 );
+
+                for( int x = 0; x < times; x++ )
+                {
+				    double val;	
+				    pch = strtok (line," \t,:");
+				    for( int t=0; (t < ic) && (pch != NULL); t++ )
+				    {
+					    sscanf (pch, "%lf\n",&val);
+					    pch = strtok (NULL, " \t,:");
+					    NN.setInput( t, val );
+					    printf( "I%d=%lf ", t, val );
+				    }                        
+				    NN.cycle();
+
+				    // Set targets for back propagation (training)
+				    for( int t=0; (t < oc) && (pch != NULL); t++ )
+				    {
+					    sscanf (pch, "%lf\n",&val);
+					    pch = strtok (NULL, " \t,:");
+					    NN.backPushTargets( val );  
+					    printf( "O%d=%lf ", t, val );
+				    }                        
 					
-				NN.backPropagate();
+				    NN.backPropagate();
 
-				printf( "[%f]", NN.getOutput(0) );
+				    printf( "[%f]", NN.getOutput(0) );
 				
-				printf( "\n" );
+				    printf( "\n" );
+                }
 			}
 		}
 		
@@ -785,46 +820,43 @@ int main( int argc, char**argv)
 	}
 	
 	
-	if( i_fp != NULL )
+	if( i_fp != NULL ) // Input file
 	{
 		//fseek( i_fp, 0, SEEK_SET );
 		
 		int ic = NN.getInputNodeCount();
 		int oc = NN.getOutputNodeCount();
 
-		while( !feof(i_fp) )
-		{
-			// Cycle inputs
-			for( int t=0; t < ic; t++ )
+			char *line = NULL;
+			size_t len = 0;
+			ssize_t read;
+			char *pch;
+        
+			while( (read = getline(&line, &len, i_fp)) != -1 )
 			{
+				// Cycle inputs
 				double val;	
-				if( EOF == fscanf( i_fp, "%lf", &val ) )
-                    return 1;
-				NN.setInput( t, val );
-				
-				printf( "i%d=%lf ", t, val );
-			}
-			NN.cycle();
+				pch = strtok (line," \t,:");
+				for( int t=0; (t < ic) && (pch != NULL); t++ )
+				{
+					sscanf (pch, "%lf\n",&val);
+					pch = strtok (NULL, " \t,:");
+					NN.setInput( t, val );
+					printf( "i%d=%lf ", t, val );
+				}                        
+				NN.cycle();
 
-			// Set targets for back propagation (training)
-			for( int t=0; t < oc; t++ )
-			{
-				double val;	
-				//fscanf( t_fp, "%lf", &val );
-				//fscanf( i_fp, "%l1.0f", &val );
+				// Set targets for back propagation (training)
+				for( int t=0; (t < oc); t++ )
+				{
+					printf( "o%d=%lf ", t, NN.getOutput(t) );
+				}                        
+					
+
+				//printf( "[%f]", NN.getOutput(0) );
 				
-				val = NN.getOutput( t );
-				
-				printf( "o%d=%lf ", t, val );
-				
-				if( t > 0 )
-					printf( " " );
-				
-				//printf( "%lf", val );
+				printf( "\n" );
 			}
-			
-			printf( "\n" );
-		}
 				
 	}
 	
