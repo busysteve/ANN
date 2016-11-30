@@ -29,7 +29,7 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log    printf
+#define log  //   printf
 
 #define MAX_NN_NAME 30
 
@@ -128,8 +128,8 @@ struct Connection
 	{
 		if( toNode != nullptr )
         {
-			toNode->input( in * weight ); // Apply weight here
-            log( " [%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*weight );
+			toNode->in( in * weight ); // Apply weight here
+            log( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*weight );
         }
 	}
 
@@ -150,6 +150,8 @@ struct Node
 	std::vector<Connection<T>*> conns;
 	std::vector<Connection<T>*> inConns;
     
+    bool _activate;
+
     //ActType _activation;
 
     typedef T ( *ActFunc )(T);
@@ -159,7 +161,7 @@ struct Node
     Node( ActFunc actFunc, bool bias, char* name ) : 
         inSum((T)0.0), lastOut((T)0.0), 
         deltaErr((T)0.0), grad((T)1.0), 
-        _actFunc(actFunc), _bias(bias) 
+        _actFunc(actFunc), _bias(bias), _activate(false) 
     {
         sprintf(_name, "%s", name );
     }
@@ -167,7 +169,14 @@ struct Node
     void input( T in )
     {
         inSum += in; // Sum weighted inputs for activation
-        log( " [%s]{%0.3f}SUM(%0.3f) ", _name, in, inSum );
+        log( "in[%s]{%0.3f}SUM(%0.3f)\n", _name, in, inSum );
+    }
+
+    void in( T in )
+    {
+        _activate = true;
+        inSum += in; // Sum weighted inputs for activation
+        log( "in[%s]{%0.3f}SUM(%0.3f)\n", _name, in, inSum );
     }
 
     T out()
@@ -187,7 +196,10 @@ struct Node
 
     T cycle( )
     {
-        lastOut = _actFunc( inSum );
+        if( _activate || _bias)
+            lastOut = _actFunc( inSum );
+        else
+            lastOut = inSum;
 
         if( !conns.empty() )
         {
@@ -268,8 +280,8 @@ struct Layer
         {
             char tmpname[MAX_NN_NAME];
             sprintf(tmpname, "B%d-%s", (int)nodes.size(), _name );
-            nodes.push_back( new Node<T>( _actFunc, true, tmpname ) );
-            //nodes.push_back( new Node<T>( actBias<T>, true, tmpname ) );
+            //nodes.push_back( new Node<T>( _actFunc, true, tmpname ) );
+            nodes.push_back( new Node<T>( actBias<T>, true, tmpname ) );
             //_derivActFunc = actBias<T>;
             //_derivActFunc = actBias<T>;
         }            
@@ -312,18 +324,20 @@ struct Layer
         if( nextLayer == NULL ) // output layer
         {
             T delta;
-            int nc = nodes.size()-(_bias?1:0); // minus bias
+            //int nc = nodes.size()-(_bias?1:0); // minus bias
+            int nc = nodes.size(); // minus bias
             for( i=0; i<nc; i++ )
             {
                 delta =  ( targets[i] - nodes[i]->lastOut );
 
-                nodes[i]->grad = delta * _derivActFunc( sumIn );
-                log(" [%s][%s]outer{delta=%f : sumIn=%f : grad=%f}\n", _name, nodes[i]->_name, delta, sumIn, nodes[i]->grad );
+                nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
+                log("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n", _name, nodes[i]->_name, delta, nodes[i]->lastOut, nodes[i]->grad );
             }
         }
         else
         {
-            int nc = nodes.size()-(_bias?1:0); // minus bias
+            //int nc = nodes.size()-(_bias?1:0); // minus bias
+            int nc = nodes.size(); // minus bias
             for( int n=0; n<nc; n++ )
             {
                 T sum = 0.0;
@@ -331,10 +345,13 @@ struct Layer
                 {
                         T grad = nodes[n]->conns[c]->toNode->grad;
                         sum += ( nodes[n]->conns[c]->weight ) * grad;
+                        log("    g[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
+                            _name, nodes[n]->_name, sum, nodes[n]->conns[c]->weight, grad );
                 }
 
-                nodes[n]->grad = sum * _derivActFunc( sumIn );
-                log(" [%s][%s]inner{sum=%f:sumIn=%f:grad=%f}\n", _name, nodes[n]->_name, sum, sumIn, nodes[n]->grad );
+                nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
+                log("ig[%s][%s]inner{sum=%f:sumIn=%f:grad=%f}\n", 
+                    _name, nodes[n]->_name, sum, sumIn, nodes[n]->grad );
             }
         }
 
@@ -353,16 +370,18 @@ struct Layer
             {
                 for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- ) 
                 {
-                    delta = nodes[i]->inConns[c]->delta;
+                    Connection<T>* conn = nodes[i]->inConns[c];
+                    delta = conn->delta;
                     grad = nodes[i]->grad;
                     out = nodes[i]->lastOut;
-                    //weight = nodes[i]->inConns[c]->weight;
+                    weight = conn->weight;
 
                     delta = learnRate * grad * out + momentum * delta;
 
-                    nodes[i]->inConns[c]->delta = delta;
-                    nodes[i]->inConns[c]->weight += delta; 
-                    log(" [%s][%s]w=%f, d=%f, o=%f \n", _name, nodes[i]->inConns[c]->_name, nodes[i]->inConns[c]->weight, delta, out );
+                    conn->delta = delta;
+                    conn->weight += delta; 
+                    log("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f \n", 
+                        _name, conn->_name, weight, conn->weight, delta, out, grad );
                 }
             }
 
