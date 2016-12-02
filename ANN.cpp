@@ -334,6 +334,7 @@ struct Layer
             {
                 T grad = nLayer->nodes[n]->conns[c]->toNode->grad;
                 sum += ( nLayer->nodes[n]->conns[c]->weight ) * grad;
+
                 log("    sumDOW[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
                     nLayer->_name, nLayer->nodes[n]->_name, sum, 
                     nLayer->nodes[n]->conns[c]->weight, grad );
@@ -388,7 +389,7 @@ struct Layer
         }
 
         if( prevLayer != NULL )
-            //if( prevLayer->prevLayer != NULL )
+            if( prevLayer->prevLayer != NULL )
                 prevLayer->calcGradient(targets); // target not used in the following calls
     }
 
@@ -405,7 +406,9 @@ struct Layer
                     Connection<T>* conn = nodes[i]->inConns[c];
                     delta = conn->delta;
                     grad = nodes[i]->grad;
-                    out = nodes[i]->lastOut;
+                    //grad = conn->fromNode->grad;
+                    //out = nodes[i]->lastOut;
+                    out = conn->fromNode->lastOut;
                     weight = conn->weight;
 
                     delta = learnRate * grad * out + momentum * delta;
