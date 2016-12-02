@@ -29,13 +29,18 @@
 #include "XMLTag/xmltag.h"
 
 
-//#define log
-//#define log   printf
-#define log  if( g_output > 0 ) if( g_counter%g_output == 0 ) printf 
+//#define log_verbose
+//#define log_verbose   printf
+#define log_verbose  if( g_verbose > 0 ) if( g_counter%g_verbose == 0 ) printf 
+
+#define log_output  if( g_output > 0 ) if( g_counter%g_output == 0 ) printf 
+
+
 
 #define MAX_NN_NAME 30
 
 int g_output = 0;
+int g_verbose = 0;
 int g_counter = 0;
 
 const void* nullptr = NULL;
@@ -134,7 +139,7 @@ struct Connection
 		if( toNode != nullptr )
         {
 			toNode->in( in * weight ); // Apply weight here
-            log( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*weight );
+            log_verbose( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*weight );
         }
 	}
 
@@ -174,14 +179,14 @@ struct Node
     void input( T in )
     {
         inSum += in; // Sum weighted inputs for activation
-        log( "in[%s]{%0.3f}SUM(%0.3f)\n", _name, in, inSum );
+        log_verbose( "in[%s]{%0.3f}SUM(%0.3f)\n", _name, in, inSum );
     }
 
     void in( T in )
     {
         _activate = true;
         inSum += in; // Sum weighted inputs for activation
-        log( "in[%s]{%0.3f}SUM(%0.3f)\n", _name, in, inSum );
+        log_verbose( "in[%s]{%0.3f}SUM(%0.3f)\n", _name, in, inSum );
     }
 
     T out()
@@ -215,9 +220,9 @@ struct Node
         }
 
         if( _bias )
-            log( "[%s](in=%lf)--------- bias --------(out=%lf)\n", _name, inSum, lastOut );
+            log_verbose( "[%s](in=%lf)--------- bias --------(out=%lf)\n", _name, inSum, lastOut );
         else
-            log( "[%s](in=%lf)-----------------------(out=%lf)\n", _name, inSum, lastOut );
+            log_verbose( "[%s](in=%lf)-----------------------(out=%lf)\n", _name, inSum, lastOut );
  
         inSum = (T)0.0;
 
@@ -335,7 +340,7 @@ struct Layer
                 T grad = nLayer->nodes[n]->conns[c]->toNode->grad;
                 sum += ( nLayer->nodes[n]->conns[c]->weight ) * grad;
 
-                log("    sumDOW[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
+                log_verbose("    sumDOW[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
                     nLayer->_name, nLayer->nodes[n]->_name, sum, 
                     nLayer->nodes[n]->conns[c]->weight, grad );
             }        
@@ -356,7 +361,7 @@ struct Layer
                 delta =  ( targets[i] - nodes[i]->lastOut );
 
                 nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
-                log("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n", 
+                log_verbose("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n", 
                     _name, nodes[i]->_name, delta, nodes[i]->lastOut, nodes[i]->grad );
             }
         }
@@ -372,7 +377,7 @@ struct Layer
                 {
                         T grad = nodes[n]->conns[c]->toNode->grad;
                         sum += ( nodes[n]->conns[c]->weight ) * grad;
-                        log("    g[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
+                        log_verbose("    g[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
                             _name, nodes[n]->_name, sum, nodes[n]->conns[c]->weight, grad );
                 }
                 
@@ -382,7 +387,7 @@ struct Layer
 
                 nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
 
-                log("ig[%s][%s]inner{sum=%f:sumIn=%f:grad=%f:deriv=%f:out=%f}\n", 
+                log_verbose("ig[%s][%s]inner{sum=%f:sumIn=%f:grad=%f:deriv=%f:out=%f}\n", 
                     _name, nodes[n]->_name, sum, sumIn, nodes[n]->grad, 
                     _derivActFunc( nodes[n]->lastOut ), nodes[n]->lastOut );
             }
@@ -415,7 +420,7 @@ struct Layer
 
                     conn->delta = delta;
                     conn->weight += delta; 
-                    log("   w[%s][%s]w=%lf:w=%lf, d=%lf, o=%lf, g=%lf \n", 
+                    log_verbose("   w[%s][%s]w=%lf:w=%lf, d=%lf, o=%lf, g=%lf \n", 
                         _name, conn->_name, weight, conn->weight, delta, out, grad );
                 }
             }
@@ -426,7 +431,7 @@ struct Layer
 
     void cycle(  )
     {
-        log("\n");
+        log_verbose("\n");
 
         sumIn = 0.0;
 
@@ -436,7 +441,7 @@ struct Layer
         if( nextLayer != NULL )
             nextLayer->cycle( );
 
-        log("\n");
+        log_verbose("\n");
     }
 
 };
@@ -641,7 +646,7 @@ struct NeuralNet
 			layer = layer->nextLayer;
 		}
 		
-		xml.store( fileName.c_str() );
+		xml.store( fileName.c_str(), true );
 	}
 	
 
@@ -737,12 +742,20 @@ int main( int argc, char**argv)
                 ++i;
                 bias = true;
                 break;
+            case 'v':
+                ++i;
+                g_verbose = 1;
+                if( argv[i][0] != '-' )
+                {
+                    g_verbose = atoi( argv[i] );
+                }
+                ++i;
+                break;
             case 'o':
                 ++i;
                 g_output = 1;
                 if( argv[i][0] != '-' )
                 {
-
                     g_output = atoi( argv[i] );
                 }
                 ++i;
@@ -851,7 +864,7 @@ int main( int argc, char**argv)
 					    sscanf (pch, "%lf\n",&val);
 					    pch = strtok (NULL, " \t,:");
 					    NN.setInput( t, val );
-					    printf( "I%d=%lf ", t, val );
+				        log_output( "I%d=%lf ", t, val );
 				    }                        
 				    NN.cycle();
 
@@ -861,22 +874,22 @@ int main( int argc, char**argv)
 					    sscanf (pch, "%lf\n",&val);
 					    pch = strtok (NULL, " \t,:");
 					    NN.backPushTargets( val );  
-					    printf( "O%d=%lf ", t, val );
+					    log_output( "O%d=%lf ", t, val );
 				    }                        
 					
 				    NN.backPropagate();
 
-				    printf( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
+				    log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 				
-				    printf( "\n" );
+				    log_output( "\n" );
 
                     g_counter++;
                 }
 			}
 		}
 		
-        if( cont != true )
-    		NN.store( strWeights.c_str() );
+        //if( cont != true )
+    	NN.store( strWeights.c_str() );
 				
 	}
 	else
@@ -897,7 +910,7 @@ int main( int argc, char**argv)
 			ssize_t read;
 			char *pch;
         
-            //g_output = 1;
+            //g_verbose = 1;
 
 			while( (read = getline(&line, &len, i_fp)) != -1 )
 			{
