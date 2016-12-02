@@ -29,9 +29,14 @@
 #include "XMLTag/xmltag.h"
 
 
-#define log  //   printf
+//#define log
+//#define log   printf
+#define log  if( g_output > 0 ) if( g_counter%g_output == 0 ) printf 
 
 #define MAX_NN_NAME 30
+
+int g_output = 0;
+int g_counter = 0;
 
 const void* nullptr = NULL;
 
@@ -318,28 +323,49 @@ struct Layer
         return netErr;
     }
 
+    T sumDOW( Layer<T> *nLayer )
+    {
+        T sum = 0.0;
+        int ns = nLayer->nodes.size()-( nLayer->_bias ? 1 : 0 );
+
+        for( int n = 0; n < ns; n++ )
+        {
+            for( int c = 0; c < nLayer->nodes[n]->conns.size(); c++ )
+            {
+                T grad = nLayer->nodes[n]->conns[c]->toNode->grad;
+                sum += ( nLayer->nodes[n]->conns[c]->weight ) * grad;
+                log("    sumDOW[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
+                    nLayer->_name, nLayer->nodes[n]->_name, sum, 
+                    nLayer->nodes[n]->conns[c]->weight, grad );
+            }        
+        }
+
+        return sum;
+    }
+
     void calcGradient( std::vector<T> &targets )
     {
-        int i;
         if( nextLayer == NULL ) // output layer
         {
             T delta;
             //int nc = nodes.size()-(_bias?1:0); // minus bias
             int nc = nodes.size(); // minus bias
-            for( i=0; i<nc; i++ )
+            for( int i=0; i<nc; i++ )
             {
                 delta =  ( targets[i] - nodes[i]->lastOut );
 
                 nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
-                log("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n", _name, nodes[i]->_name, delta, nodes[i]->lastOut, nodes[i]->grad );
+                log("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n", 
+                    _name, nodes[i]->_name, delta, nodes[i]->lastOut, nodes[i]->grad );
             }
         }
         else
         {
-            //int nc = nodes.size()-(_bias?1:0); // minus bias
-            int nc = nodes.size(); // minus bias
+            int nc = nodes.size()-(_bias?1:0); // minus bias
+            //int nc = nodes.size(); // minus bias
             for( int n=0; n<nc; n++ )
             {
+
                 T sum = 0.0;
                 for( int c = nodes[n]->conns.size()-1; c >= 0; c-- ) 
                 {
@@ -348,10 +374,16 @@ struct Layer
                         log("    g[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n", 
                             _name, nodes[n]->_name, sum, nodes[n]->conns[c]->weight, grad );
                 }
+                
+
+                //T sum = sumDOW( nextLayer );
+                //T sum = sumDOW( this );
 
                 nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
-                log("ig[%s][%s]inner{sum=%f:sumIn=%f:grad=%f}\n", 
-                    _name, nodes[n]->_name, sum, sumIn, nodes[n]->grad );
+
+                log("ig[%s][%s]inner{sum=%f:sumIn=%f:grad=%f:deriv=%f:out=%f}\n", 
+                    _name, nodes[n]->_name, sum, sumIn, nodes[n]->grad, 
+                    _derivActFunc( nodes[n]->lastOut ), nodes[n]->lastOut );
             }
         }
 
@@ -380,7 +412,7 @@ struct Layer
 
                     conn->delta = delta;
                     conn->weight += delta; 
-                    log("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f \n", 
+                    log("   w[%s][%s]w=%lf:w=%lf, d=%lf, o=%lf, g=%lf \n", 
                         _name, conn->_name, weight, conn->weight, delta, out, grad );
                 }
             }
@@ -702,6 +734,16 @@ int main( int argc, char**argv)
                 ++i;
                 bias = true;
                 break;
+            case 'o':
+                ++i;
+                g_output = 1;
+                if( argv[i][0] != '-' )
+                {
+
+                    g_output = atoi( argv[i] );
+                }
+                ++i;
+                break;
             case 'c':
                 ++i;
                 cont = true;
@@ -795,7 +837,6 @@ int main( int argc, char**argv)
 			while( (read = getline(&line, &len, t_fp)) != -1 )
 			{
 				// Cycle inputs
-
                 memcpy( tmpline, line, len+1 );
 
                 for( int x = 0; x < times; x++ )
@@ -822,9 +863,11 @@ int main( int argc, char**argv)
 					
 				    NN.backPropagate();
 
-				    printf( "[%f]", NN.getOutput(0) );
+				    printf( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 				
 				    printf( "\n" );
+
+                    g_counter++;
                 }
 			}
 		}
@@ -839,7 +882,7 @@ int main( int argc, char**argv)
 	}
 	
 	
-	if( i_fp != NULL ) // Input file
+	if( i_fp != NULL ) // input file
 	{
 		//fseek( i_fp, 0, SEEK_SET );
 		
@@ -851,6 +894,8 @@ int main( int argc, char**argv)
 			ssize_t read;
 			char *pch;
         
+            //g_output = 1;
+
 			while( (read = getline(&line, &len, i_fp)) != -1 )
 			{
 				// Cycle inputs
