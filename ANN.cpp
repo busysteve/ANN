@@ -740,7 +740,11 @@ int main( int argc, char**argv)
 				++i;
 				strInputFile = argv[i];
 				++i;
-				i_fp = fopen( strInputFile.c_str(), "r" );
+
+				if( strInputFile == "-" )
+					i_fp = stdin;
+				else				
+					i_fp = fopen( strInputFile.c_str(), "r" );
 				break;
 			case 'b':
 				++i;
