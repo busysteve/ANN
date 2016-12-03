@@ -24,9 +24,7 @@ Lets look at the following command line:
 -l = layers 
 
     L49 = Linear layer of 49 input nodes
-    
     S10 = Sigmoid hidden layer of 10 nodes
-    
     L5  = Linear output layer of 5 nodes
     
 
