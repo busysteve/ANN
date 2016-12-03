@@ -23,5 +23,7 @@ Lets look at the following command line:
         S10 = Sigmoid hidden layer of 10 nodes
         L5  = Linear output layer of 5 nodes
     
+More from within alphabet:
 
+    cat test_letters.txt | awk -f prep_letters_for_input.awk | ../ann -w letters.weights.xml -i - | awk -f translate_letter_binary.awk
 
