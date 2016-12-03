@@ -1,6 +1,11 @@
 # ANN
 Artificial Neural Network C++ template based class set
 
+Build with:
+
+    g++ -O3 -o ann ANN.cpp XMLTag/xmltag.cpp
+
+
 Lets look at the following command line:
 
     ./ann -w letters.weights.xml -i letters_input.txt -r 0.05 -m 0.0001 -t letters_train.txt -o 5003 -e 30000  -b -l L49 S10 L5
