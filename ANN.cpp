@@ -916,7 +916,7 @@ int main( int argc, char**argv)
 		ssize_t read;
 		char *pch;
 
-		//g_verbose = 1;
+		if( g_output > 0 ) g_output = 1;
 
 		while( (read = getline(&line, &len, i_fp)) != -1 )
 		{
@@ -928,14 +928,15 @@ int main( int argc, char**argv)
 				sscanf (pch, "%lf\n",&val);
 				pch = strtok (NULL, " \t,:");
 				NN.setInput( t, val );
-				printf( "i%d=%lf ", t, val );
+				log_output( "i%d=%lf ", t, val );
 			}
 			NN.cycle();
 
 			// Set targets for back propagation (training)
 			for( int t=0; (t < oc); t++ )
 			{
-				printf( "o%d=%lf ", t, NN.getOutput(t) );
+				log_output( "o%d=", t );
+				printf( "%lf ", NN.getOutput(t) );
 			}
 
 			//printf( "[%f]", NN.getOutput(0) );
