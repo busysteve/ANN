@@ -1,0 +1,67 @@
+<NeuralNet>
+	<layer activation="sigmoid" bias="1" name="input_layer">
+		<nodes>
+			<node bias="0">
+				<connections>
+					<connection>
+						<weight>-0.2</weight>
+					</connection>
+					<connection>
+						<weight>-0.1</weight>
+					</connection>
+				</connections>
+			</node>
+			<node bias="0">
+				<connections>
+					<connection>
+						<weight>-0.1</weight>
+					</connection>
+					<connection>
+						<weight>0.3</weight>
+					</connection>
+				</connections>
+			</node>
+			<node bias="1">
+				<connections>
+					<connection>
+						<weight>0.1</weight>
+					</connection>
+					<connection>
+						<weight>0.1</weight>
+					</connection>
+				</connections>
+			</node>
+		</nodes>
+	</layer>
+	<layer activation="sigmoid" bias="1" name="hidden_layer">
+		<nodes>
+			<node bias="0">
+				<connections>
+					<connection>
+						<weight>0.2</weight>
+					</connection>
+				</connections>
+			</node>
+			<node bias="0">
+				<connections>
+					<connection>
+						<weight>0.3</weight>
+					</connection>
+				</connections>
+			</node>
+			<node bias="1">
+				<connections>
+					<connection>
+						<weight>0.2</weight>
+					</connection>
+				</connections>
+			</node>
+		</nodes>
+	</layer>
+	<layer activation="sigmoid" bias="1" name="output_layer">
+		<nodes>
+			<node bias="0"/>
+			<node bias="1"/>
+		</nodes>
+	</layer>
+</NeuralNet>
