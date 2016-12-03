@@ -3,7 +3,7 @@
     {
         printf( "%s", $0 ); 
 
-        for( i=length($0); i < 8; i++ )
+        for( i=length($0); i < 7; i++ )
             printf(" ");
     }
 
