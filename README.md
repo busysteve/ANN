@@ -1,5 +1,5 @@
 # ANN
-Artificial Neural Network C++ template based class set
+Artificial Neural Network C++ template based class set and training tool
 
 Build with:
 
@@ -25,5 +25,8 @@ Lets look at the following command line:
     
 More from within alphabet:
 
+    cat letter_variations.txt | awk -f prep_letters_for_input_or_training.awk > letters_for_trainging.txt
+    ../ann -w letters.weights.xml -t letters_for_training.txt -r 0.05 -m 0.001 -e 30000 -b -l L49 S10 L5
+    
     cat test_letters.txt | awk -f prep_letters_for_input.awk | ../ann -w letters.weights.xml -i - | awk -f translate_letter_binary.awk
 

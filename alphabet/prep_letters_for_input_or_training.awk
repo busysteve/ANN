@@ -5,10 +5,10 @@
     {
         line = $0;
 
-        for( i=length(line); i < 7; i++ )
+        for( i=length(line); i <= 7; i++ )
             line = line " ";
 
-        for( i=1; i <= length(line); i++ )
+        for( i=1; i <= length(line) && i <= 7; i++ )
         {
             if( substr( line, i, 1 ) == " " )
                 letter_input = letter_input "0" " ";

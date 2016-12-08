@@ -1,6 +1,6 @@
 
 // g++ -g -o ann ANN.cpp XMLTag/xmltag.cpp
-// ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -x 10 -i input.txt -l S2 S3 S2 S1
+// ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -e 10 -i input.txt -l S2 S3 S2 S1
 // or
 // ./ann -w test.weights.xml -i input.txt
 
