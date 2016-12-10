@@ -2,85 +2,93 @@
 enum ActType{ 
   linear = 0, sigmoid, tangenth, none, bias };
 
+
 template <class T>
-T actBias( T n )
+class funcs
 {
-  return (T)1.0;
-}
+  public:
+  static T actBias( T n )
+  {
+    return 1.0;
+  }
 
-template <typename T>
-T actNone( T n )
-{
-  return n;
-}
+  static T actNone( T n )
+  {
+    return n;
+  }
 
-template <typename T>
-T actLinear( T n )
-{
-  return n;
-}
+  static T actLinear( T n )
+  {
+    return n;
+  }
 
-
-template <typename T>
-T actSigmoid( T n )
-{
-  return 1.0 / ( 1.0 + exp(-n) );
-}
-
-
-template <typename T>
-T derivLinear( T n )
-{
-  return 1.0;
-}
-
-
-template <typename T>
-T derivSigmoid( T n )
-{
-  return n * ( 1.0 - n );
-}
-
-
-
-template<class T>
-class vector
-{
-  T _vec;
-  int _sz;
-  int _trk;
-
-public:
-  vector(int sz=10) : 
-  _sz(sz), _trk(0) { 
-    _vec = malloc( sizeof(T) * sz ); 
-  };
-  ~vector(){ 
-    free(_vec); 
-  };
-  void push_back( T p )
-  { 
-    ((T)(_vec+_trk)) = p; 
-    _trk++; 
-    if( _trk > _sz ) 
-    { 
-      _sz+=10;
-      _vec = realloc( _vec, sizeof(T) * _sz ); 
-    }
-  };
-  T operator[](int i){ 
-    return _vec+i; 
-  };
-
-  boolean empty() { 
-    return _trk == 0; 
-  };
-  int size() { 
-    return _trk; 
-  };
-
-
+  static T actSigmoid( T n )
+  {
+    return 1.0 / ( 1.0 + exp(-n) );
+  }
+    
+  static T derivLinear( T n )
+  {
+    return 1.0;
+  }
+  
+  static T derivSigmoid( T n )
+  {
+    return n * ( 1.0 - n );
+  }
 };
+
+
+// Minimal class to replace std::vector
+template<class Data>
+class Vector {
+  size_t d_size; // Stores no. of actually stored objects
+  size_t d_capacity; // Stores allocated capacity
+  Data *d_data; // Stores data
+public:
+  Vector() : 
+  d_size(0), d_capacity(0), d_data(0) {
+  }; // Default constructor
+  Vector(Vector const &other) : 
+  d_size(other.d_size), d_capacity(other.d_capacity), d_data(0) { 
+    d_data = (Data *)malloc(d_capacity*sizeof(Data)); 
+    memcpy(d_data, other.d_data, d_size*sizeof(Data)); 
+  }; // Copy constuctor
+  ~Vector() { 
+    free(d_data); 
+  }; // Destructor
+  Vector &operator=(Vector const &other) { 
+    free(d_data); 
+    d_size = other.d_size; 
+    d_capacity = other.d_capacity; 
+    d_data = (Data *)malloc(d_capacity*sizeof(Data)); 
+    memcpy(d_data, other.d_data, d_size*sizeof(Data)); 
+    return *this; 
+  }; // Needed for memory management
+  void push_back(Data const &x) { 
+    if (d_capacity == d_size) resize(); 
+    d_data[d_size++] = x; 
+  }; // Adds new value. If needed, allocates more space
+  size_t size() const { 
+    return d_size; 
+  }; // Size getter
+  Data const &operator[](size_t idx) const { 
+    return d_data[idx]; 
+  }; // Const getter
+  Data &operator[](size_t idx) { 
+    return d_data[idx]; 
+  }; // Changeable getter
+private:
+  void resize() { 
+    d_capacity = d_capacity ? d_capacity*2 : 1; 
+    Data *newdata = (Data *)malloc(d_capacity*sizeof(Data)); 
+    memcpy(newdata, d_data, d_size * sizeof(Data)); 
+    free(d_data); 
+    d_data = newdata; 
+  };// Allocates double the old space
+};
+
+
 
 template<typename T>
 class Node
@@ -94,7 +102,7 @@ public:
 
   class Connection;
 
-  vector<Connection*> conns, inConns;
+  Vector<Connection*> conns, inConns;
 
   bool _activate;
 
@@ -194,7 +202,7 @@ class Layer
 {
 public:
 
-  vector<Node<T>*> nodes;
+  Vector<Node<T>*> nodes;
 
   Layer<T>* prevLayer;
   Layer<T>* nextLayer;
@@ -213,9 +221,7 @@ public:
 
   T sumIn;
 
-  String _name;
-
-  Layer( int n, int act, bool bias )
+  Layer( int n, ActType act, bool bias )
 : 
     count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias),
     sumIn(0.0)
@@ -223,13 +229,13 @@ public:
 
       if( act == linear )
       {
-        _actFunc = actLinear;
-        _derivActFunc = derivLinear;
+        _actFunc = funcs<T>::actLinear;
+        _derivActFunc = funcs<T>::derivLinear;
       }
       else if( act == sigmoid )
       {
-        _actFunc = actSigmoid;
-        _derivActFunc = derivSigmoid;
+        _actFunc = funcs<T>::actSigmoid;
+        _derivActFunc = funcs<T>::derivSigmoid;
       }
       /*
       else if( act == tangenth )
@@ -240,8 +246,8 @@ public:
        */
       else if( act == none )
       {
-        _actFunc = actNone;
-        _derivActFunc = actNone;
+        _actFunc = funcs<T>::actNone;
+        _derivActFunc = funcs<T>::actNone;
       }
 
       for( int i=0; i < count; i++ )
@@ -251,7 +257,7 @@ public:
 
       if( bias == true )
       {
-        nodes.push_back( new Node<T>( actBias, true ) );
+        nodes.push_back( new Node<T>( funcs<T>::actBias, true ) );
       }
     }
 
@@ -269,7 +275,7 @@ public:
     }
   }
 
-  T calcError( vector<T> &targets )
+  T calcError( Vector<T> &targets )
   {
     T netErr = (T)0.0, delta;
     // minus bias
@@ -305,7 +311,7 @@ public:
     return sum;
   }
 
-  void calcGradient( vector<T> &targets )
+  void calcGradient( Vector<T> &targets )
   {
     if( nextLayer == NULL )	 // output layer
     {
@@ -399,11 +405,13 @@ class NeuralNet
   T _momentum;
   Layer<T> *_inLayer, *_outLayer;
 
-  vector<Layer<T>*> layers;
+  Vector<Layer<T>*> layers;
 
-  vector<T> vecBackPrepTargets;
+  Vector<T> vecBackPrepTargets;
 
-  NeuralNet( T learn_rate = 0.0001, T momentum = 0.001 )
+public:
+
+  NeuralNet( T learn_rate = 0.01, T momentum = 0.0001 )
 : 
     _learnRate( learn_rate ), _momentum( momentum )
     {
@@ -524,5 +532,22 @@ class NeuralNet
 
 };
 
+
+NeuralNet<double> nn( 0.05, 0.0001 );
+
+void setup()
+{
+  nn.addLayer( 2, linear, bias );
+  nn.addLayer( 2, sigmoid, bias );
+  nn.addLayer( 1, linear, bias );
+
+}
+
+
+void loop()
+{
+
+
+}
 
 
