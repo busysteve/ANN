@@ -1,12 +1,16 @@
 
+#include <EEPROM.h>
+
+
 enum ActType{ 
   linear = 0, sigmoid, tangenth, none, bias };
+
 
 
 template <class T>
 class funcs
 {
-  public:
+public:
   static T actBias( T n )
   {
     return 1.0;
@@ -26,12 +30,12 @@ class funcs
   {
     return 1.0 / ( 1.0 + exp(-n) );
   }
-    
+
   static T derivLinear( T n )
   {
     return 1.0;
   }
-  
+
   static T derivSigmoid( T n )
   {
     return n * ( 1.0 - n );
@@ -530,6 +534,25 @@ public:
 
   }
 
+  int EEPROM_writeAnything(int ee, const T& value)
+  {
+    const byte* p = (const byte*)(const void*)&value;
+    int i;
+    for (i = 0; i < sizeof(value); i++)
+      EEPROM.write(ee++, *p++);
+    return i;
+  }
+
+  int EEPROM_readAnything(int ee, T& value)
+  {
+    byte* p = (byte*)(void*)&value;
+    int i;
+    for (i = 0; i < sizeof(value); i++)
+      *p++ = EEPROM.read(ee++);
+    return i;
+  }
+
+
 };
 
 
@@ -549,5 +572,6 @@ void loop()
 
 
 }
+
 
 
