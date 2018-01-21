@@ -261,10 +261,11 @@ struct Layer
 	int count;
 
 	T sumIn;
+    T _lastError;
 
 	Layer( int n, ActType act, bool bias, char* name )
 		: count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias),
-		sumIn(0.0)
+		sumIn(0.0), _lastError(0.0)
 	{
 
 		strcpy( _name, name );
@@ -337,8 +338,15 @@ struct Layer
 		netErr /= (T)nc;
 		netErr = sqrt( netErr );
 
+        _lastError = netErr;
+
 		return netErr;
 	}
+
+    T lastError()
+    {
+        return _lastError;
+    }
 
 	T sumDOW( Layer<T> *nLayer )
 	{
@@ -443,14 +451,14 @@ struct Layer
 		}
 	}
 
-	void cycle(  )
+	void cycle( )
 	{
 		log_verbose("\n");
 
 		sumIn = 0.0;
 
 		for( int i=nodes.size()-1; i>=0; i-- )
-			sumIn += nodes[i]->cycle();
+			sumIn += nodes[i]->cycle( );
 
 		if( nextLayer != NULL )
 			nextLayer->cycle( );
@@ -576,11 +584,11 @@ struct NeuralNet
 		vecBackPrepTargets.push_back( t );
 	}
 
-	void backPropagate()
+	T backPropagate()
 	{
 
 		// * Calc error for layers
-		_outLayer->calcError( vecBackPrepTargets );
+		T layer_error = _outLayer->calcError( vecBackPrepTargets );
 
 		// * Calc gradients recursively
 		_outLayer->calcGradient( vecBackPrepTargets );
@@ -592,6 +600,7 @@ struct NeuralNet
 
 		vecBackPrepTargets.clear();
 
+        return layer_error;
 	}
 
 	void store( std::string fileName )
@@ -732,6 +741,7 @@ int main( int argc, char**argv)
 	FILE *t_fp = NULL, *i_fp = NULL;
 	bool bias = false;
 	bool cont = false;
+    bool bDisplayErrors = false;
 
 	NeuralNet<double> NN;
 
@@ -739,6 +749,10 @@ int main( int argc, char**argv)
 	{
 		switch( argv[i][1] )
 		{
+			case 'E':
+				++i;
+                bDisplayErrors = true;
+				break;
 			case 'w':
 				++i;
 				strWeights = argv[i];
@@ -856,6 +870,9 @@ int main( int argc, char**argv)
 	if( t_fp != NULL )			 // training file
 	{
 
+		printf("\n");
+
+
 		for( int e=0; e < training_iterations; e++ )
 		{
 			fseek( t_fp, 0, SEEK_SET );
@@ -869,7 +886,6 @@ int main( int argc, char**argv)
 
 			char tmpline[1024];
 
-			printf("\n");
 			int counter = 0;
 
 			while( (read = getline(&line, &len, t_fp)) != -1 )
@@ -899,21 +915,28 @@ int main( int argc, char**argv)
 						log_output( "O%d=%f ", t, val );
 					}
 
-					NN.backPropagate();
+					double lastError = NN.backPropagate( );
 
 					log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 
 					log_output( "\n" );
 
 					g_counter++;
+
+			    	printf("\r%1.6f %d", lastError, x );
+			    	fflush( stdout );
 				}
 
-				printf("\r%d", ++counter );
-				fflush( stdout );
+		    	printf(" %d", ++counter );
+		    	fflush( stdout );
 			}
-            printf("\n");
+
+			printf(" %d", e );
+			fflush( stdout );
 
 		}
+
+        printf("\n");
 
 		if( cont != true )
 			NN.store( strWeights.c_str() );

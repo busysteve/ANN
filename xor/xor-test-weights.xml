@@ -4,26 +4,38 @@
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>0.906357</weight>
+						<weight>-2.836597</weight>
 					</connection>
 					<connection>
-						<weight>-0.013780</weight>
+						<weight>-1.078259</weight>
 					</connection>
 					<connection>
-						<weight>0.640505</weight>
+						<weight>5.605531</weight>
+					</connection>
+					<connection>
+						<weight>2.326061</weight>
+					</connection>
+					<connection>
+						<weight>5.264370</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>0.876784</weight>
+						<weight>5.738733</weight>
 					</connection>
 					<connection>
-						<weight>0.446204</weight>
+						<weight>1.782384</weight>
 					</connection>
 					<connection>
-						<weight>0.363053</weight>
+						<weight>-2.764647</weight>
+					</connection>
+					<connection>
+						<weight>-1.255545</weight>
+					</connection>
+					<connection>
+						<weight>5.259421</weight>
 					</connection>
 				</connections>
 			</node>
@@ -34,21 +46,35 @@
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>-0.184987</weight>
+						<weight>-6.471908</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>0.180170</weight>
+						<weight>-2.612930</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>0.023889</weight>
+						<weight>-6.257881</weight>
+					</connection>
+				</connections>
+			</node>
+			<node bias="0">
+				<connections>
+					<connection>
+						<weight>-2.628050</weight>
+					</connection>
+				</connections>
+			</node>
+			<node bias="0">
+				<connections>
+					<connection>
+						<weight>12.619360</weight>
 					</connection>
 				</connections>
 			</node>
