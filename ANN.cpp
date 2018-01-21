@@ -206,9 +206,13 @@ struct Node
 	T cycle( )
 	{
 		if( _activate || _bias)
+		{
 			lastOut = _actFunc( inSum );
+		}
 		else
+		{
 			lastOut = inSum;
+		}
 
 		if( !conns.empty() )
 		{
@@ -219,9 +223,13 @@ struct Node
 		}
 
 		if( _bias )
-			log_verbose( "[%s](in=%lf)--------- bias --------(out=%lf)\n", _name, inSum, lastOut );
+		{
+			log_verbose( "[%s](in=%f)--------- bias --------(out=%f)\n", _name, inSum, lastOut );
+		}
 		else
-			log_verbose( "[%s](in=%lf)-----------------------(out=%lf)\n", _name, inSum, lastOut );
+		{
+			log_verbose( "[%s](in=%f)-----------------------(out=%f)\n", _name, inSum, lastOut );
+		}
 
 		inSum = (T)0.0;
 
@@ -426,7 +434,7 @@ struct Layer
 
 					conn->delta = delta;
 					conn->weight += delta;
-					log_verbose("   w[%s][%s]w=%lf:w=%lf, d=%lf, o=%lf, g=%lf \n",
+					log_verbose("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f \n",
 						_name, conn->_name, weight, conn->weight, delta, out, grad );
 				}
 			}
@@ -861,6 +869,9 @@ int main( int argc, char**argv)
 
 			char tmpline[1024];
 
+			printf("\n");
+			int counter = 0;
+
 			while( (read = getline(&line, &len, t_fp)) != -1 )
 			{
 				// Cycle inputs
@@ -875,7 +886,7 @@ int main( int argc, char**argv)
 						sscanf (pch, "%lf\n",&val);
 						pch = strtok (NULL, " \t,:");
 						NN.setInput( t, val );
-						log_output( "I%d=%lf ", t, val );
+						log_output( "I%d=%f ", t, val );
 					}
 					NN.cycle();
 
@@ -885,7 +896,7 @@ int main( int argc, char**argv)
 						sscanf (pch, "%lf\n",&val);
 						pch = strtok (NULL, " \t,:");
 						NN.backPushTargets( val );
-						log_output( "O%d=%lf ", t, val );
+						log_output( "O%d=%f ", t, val );
 					}
 
 					NN.backPropagate();
@@ -896,7 +907,12 @@ int main( int argc, char**argv)
 
 					g_counter++;
 				}
+
+				printf("\r%d", ++counter );
+				fflush( stdout );
 			}
+            printf("\n");
+
 		}
 
 		if( cont != true )
@@ -932,15 +948,17 @@ int main( int argc, char**argv)
 				sscanf (pch, "%lf\n",&val);
 				pch = strtok (NULL, " \t,:");
 				NN.setInput( t, val );
-				log_output( "i%d=%lf ", t, val );
+				log_output( "i%d=%f ", t, val );
 			}
 			NN.cycle();
+
 
 			// Set targets for back propagation (training)
 			for( int t=0; (t < oc); t++ )
 			{
 				log_output( "o%d=", t );
-				printf( "%lf ", NN.getOutput(t) );
+				printf( "%f ", NN.getOutput(t) );
+				fflush( stdout );
 			}
 
 			//printf( "[%f]", NN.getOutput(0) );

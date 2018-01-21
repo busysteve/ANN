@@ -1,5 +1,6 @@
 {
-	printf( "%s", $0 );	
 	if( length($0) == 1 )
-		printf( "\n" );
+		printf( ".%s\n", $0 );
+	else
+		printf( "%s", $0 );	
 }
