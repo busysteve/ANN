@@ -4,38 +4,38 @@
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>-2.836597</weight>
+						<weight>3.601743</weight>
 					</connection>
 					<connection>
-						<weight>-1.078259</weight>
+						<weight>-2.735461</weight>
 					</connection>
 					<connection>
-						<weight>5.605531</weight>
+						<weight>1.215461</weight>
 					</connection>
 					<connection>
-						<weight>2.326061</weight>
+						<weight>-7.559979</weight>
 					</connection>
 					<connection>
-						<weight>5.264370</weight>
+						<weight>-5.884656</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>5.738733</weight>
+						<weight>-7.805722</weight>
 					</connection>
 					<connection>
-						<weight>1.782384</weight>
+						<weight>-2.960344</weight>
 					</connection>
 					<connection>
-						<weight>-2.764647</weight>
+						<weight>0.118579</weight>
 					</connection>
 					<connection>
-						<weight>-1.255545</weight>
+						<weight>3.395850</weight>
 					</connection>
 					<connection>
-						<weight>5.259421</weight>
+						<weight>-5.942486</weight>
 					</connection>
 				</connections>
 			</node>
@@ -46,35 +46,35 @@
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>-6.471908</weight>
+						<weight>9.444348</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>-2.612930</weight>
+						<weight>-3.663701</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>-6.257881</weight>
+						<weight>-5.824400</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>-2.628050</weight>
+						<weight>8.112864</weight>
 					</connection>
 				</connections>
 			</node>
 			<node bias="0">
 				<connections>
 					<connection>
-						<weight>12.619360</weight>
+						<weight>-16.926048</weight>
 					</connection>
 				</connections>
 			</node>

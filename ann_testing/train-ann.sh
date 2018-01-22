@@ -1,2 +1,2 @@
-../ann -w data-weights.xml -t training-data.txt -x 1 -r 0.0025 -m 0.002 -l S784 S980 S28 S1
+../ann -w data-weights.xml -t training-data.txt -x 1 -e 10 -r 0.8 -m 0.06 -l S784 S80 S28 S10
 

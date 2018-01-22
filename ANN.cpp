@@ -931,14 +931,14 @@ int main( int argc, char**argv)
 		    	fflush( stdout );
 			}
 
-			printf(" %d", e );
+			printf(" %d               ", e );
 			fflush( stdout );
 
 		}
 
         printf("\n");
 
-		if( cont != true )
+	//	if( cont != true )
 			NN.store( strWeights.c_str() );
 
 	}
