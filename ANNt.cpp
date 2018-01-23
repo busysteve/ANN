@@ -38,8 +38,102 @@
 int g_output = 0;
 int g_verbose = 0;
 int g_counter = 0;
+int g_threadcount = 0;
 
-const void* nullptr = NULL;
+//const void* nullptr = NULL;
+
+
+
+//======================================================================================
+
+
+#include <queue>
+#include <memory>
+#include <mutex>
+#include <condition_variable>
+
+template<typename T>
+class threadsafe_queue
+{
+
+private:
+    mutable std::mutex mut;
+    std::queue<T> data_queue;
+    std::condition_variable data_cond;
+    std::condition_variable empty_cond;
+public:
+    threadsafe_queue()
+    {}
+    threadsafe_queue(threadsafe_queue const& other)
+    {
+        std::lock_guard<std::mutex> lk(other.mut);
+        data_queue=other.data_queue;
+    }
+
+    void push(T new_value)
+    {
+        std::lock_guard<std::mutex> lk(mut);
+        data_queue.push(new_value);
+        data_cond.notify_one();
+    }
+
+    void wait_and_pop(T& value)
+    {
+        std::unique_lock<std::mutex> lk(mut);
+        data_cond.wait(lk,[this]{return !data_queue.empty();});
+        value=data_queue.front();
+        data_queue.pop();
+        if( data_queue.empty() ) empty_cond.notify_one();
+    }
+
+    std::shared_ptr<T> wait_and_pop()
+    {
+        std::unique_lock<std::mutex> lk(mut);
+        data_cond.wait(lk,[this]{return !data_queue.empty();});
+        std::shared_ptr<T> res(std::make_shared<T>(data_queue.front()));
+        data_queue.pop();
+        if( data_queue.empty() ) empty_cond.notify_one();
+        return res;
+    }
+
+    bool try_pop(T& value)
+    {
+        std::lock_guard<std::mutex> lk(mut);
+        if(data_queue.empty())
+            return false;
+        value=data_queue.front();
+        data_queue.pop();
+        if( data_queue.empty() ) empty_cond.notify_one();
+        return true;
+    }
+
+    std::shared_ptr<T> try_pop()
+    {
+        std::lock_guard<std::mutex> lk(mut);
+        if(data_queue.empty())
+            return std::shared_ptr<T>();
+        std::shared_ptr<T> res(std::make_shared<T>(data_queue.front()));
+        data_queue.pop();
+        if( data_queue.empty() ) empty_cond.notify_one();
+        return res;
+    }
+
+    bool empty() const
+    {
+        std::lock_guard<std::mutex> lk(mut);
+        return data_queue.empty();
+    }
+
+    void wait_for_empty()
+    {
+        std::unique_lock<std::mutex> lk(mut);
+        empty_cond.wait(lk,[this]{return data_queue.empty();});
+    }
+
+};
+
+
+//======================================================================================
 
 enum ActType{ linear = 0, sigmoid, tangenth, none, bias };
 
@@ -150,7 +244,8 @@ template<typename T>
 struct Node
 {
 
-	T inSum, lastOut;
+	T inSum;
+    T lastOut;
 	T deltaErr;
 	T grad;
 	bool _bias;
@@ -200,7 +295,6 @@ struct Node
 		Connection<T>* pConn = new Connection<T>( this, node );
 		conns.push_back( pConn );
 		node->inConns.push_back( pConn );
-
 	}
 
 	T cycle( )
@@ -238,6 +332,11 @@ struct Node
 
 };
 
+threadsafe_queue< std::pair< double*, Node<double>* > > node_queue;
+
+
+
+
 template<typename T>
 struct Layer
 {
@@ -261,6 +360,7 @@ struct Layer
 	int count;
 
 	T sumIn;
+
     T _lastError;
 
 	Layer( int n, ActType act, bool bias, char* name )
@@ -458,7 +558,14 @@ struct Layer
 		sumIn = 0.0;
 
 		for( int i=nodes.size()-1; i>=0; i-- )
-			sumIn += nodes[i]->cycle( );
+        {
+            if( g_threadcount <= 0 )
+			    sumIn += nodes[i]->cycle( );
+            else
+                node_queue.push( std::make_pair( &sumIn, nodes[i] ) );
+        }
+
+        node_queue.wait_for_empty();
 
 		if( nextLayer != NULL )
 			nextLayer->cycle( );
@@ -721,6 +828,56 @@ struct NeuralNet
 	}
 };
 
+
+//======================================================================================
+
+
+#include <thread>
+
+
+class threaded_base_class
+{
+
+public:
+	threaded_base_class() : thd(0) 
+	{ thd = new std::thread(threaded_base_class::worker, this); }
+
+	void detach() { if(thd) thd->detach(); }
+	void join()   { if(thd) thd->join();   }
+
+	~threaded_base_class() { delete thd; }
+
+private:
+	static void worker( threaded_base_class* tp )
+	{ tp->task(); }
+	
+	std::thread *thd;
+
+protected:
+	virtual void task()=0;
+};
+
+class NodeWorker : public threaded_base_class
+{
+	
+
+	void task()
+	{
+		while(true)
+		{
+            std::pair< double*, Node<double>* > node_pair;
+
+            node_queue.wait_and_pop( node_pair );
+
+            (*node_pair.first) += node_pair.second->cycle();
+		}
+	}
+};
+
+
+//======================================================================================
+
+
 int main( int argc, char**argv)
 {
 
@@ -778,6 +935,15 @@ int main( int argc, char**argv)
 				if( argv[i][0] != '-' )
 				{
 					g_verbose = atoi( argv[i] );
+				}
+				++i;
+				break;
+			case 'T':
+				++i;
+				g_threadcount = 1;
+				if( argv[i][0] != '-' )
+				{
+					g_threadcount = atoi( argv[i] );
 				}
 				++i;
 				break;
@@ -861,6 +1027,18 @@ int main( int argc, char**argv)
 		}
 
 	}
+
+
+    std::vector<NodeWorker*> vecNodeThreads;
+
+    for( int tc=0; tc < g_threadcount; tc++ )
+        vecNodeThreads.push_back( new NodeWorker );
+
+    for( auto t : vecNodeThreads )
+    {
+        t->detach();
+        printf("starting thread\n");
+    }
 
 	if( cont == true )
 	{
