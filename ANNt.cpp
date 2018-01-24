@@ -1065,77 +1065,78 @@ int main( int argc, char**argv)
 
         unsigned long counter=0;
 
-		for( int x = 0; x < times; x++ )
-		{
 
-			int ic = NN.getInputNodeCount();
-			int oc = NN.getOutputNodeCount();
-			ssize_t read;
-			char *pch;
+		int ic = NN.getInputNodeCount();
+		int oc = NN.getOutputNodeCount();
+		ssize_t read;
+		char *pch;
 
-			//char tmpline[1024];
+		//char tmpline[1024];
 
-            for( int e=0; e < training_iterations; e++ )
-            {
-			    fseek( t_fp, 0, SEEK_SET );
+        for( int e=0; e < training_iterations; e++ )
+        {
+		    fseek( t_fp, 0, SEEK_SET );
 
-			    char *line = NULL;
-			    size_t len = 0;
+		    char *line = NULL;
+		    size_t len = 0;
 
-			    while( (read = getline(&line, &len, t_fp)) != -1 )
-			    {
+		    while( (read = getline(&line, &len, t_fp)) != -1 )
+		    {
 
-				    // Cycle inputs
-				    //memcpy( tmpline, line, len+1 );
+			    // Cycle inputs
+			    //memcpy( tmpline, line, len+1 );
 
-				    dataType val;
-				    pch = strtok (line," \t,:");
-				    for( int t=0; (t < ic) && (pch != NULL); t++ )
-				    {
-					    sscanf (pch, "%lf\n",&val);
-					    pch = strtok (NULL, " \t,:");
-					    NN.setInput( t, val );
-					    log_output( "I%d=%lf ", t, val );
-				    }
-				    NN.cycle();
+	            for( int x = 0; x < times; x++ )
+	            {
+			        dataType val;
+			        pch = strtok (line," \t,:");
+			        for( int t=0; (t < ic) && (pch != NULL); t++ )
+			        {
+				        sscanf (pch, "%lf\n",&val);
+				        pch = strtok (NULL, " \t,:");
+				        NN.setInput( t, val );
+				        log_output( "I%d=%lf ", t, val );
+			        }
+			        NN.cycle();
 
-				    // Set targets for back propagation (training)
-				    for( int t=0; (t < oc) && (pch != NULL); t++ )
-				    {
-					    sscanf (pch, "%lf\n",&val);
-					    pch = strtok (NULL, " \t,:");
-					    NN.backPushTargets( val );
-					    log_output( "O%d=%f ", t, val );
-				    }
+			        // Set targets for back propagation (training)
+			        for( int t=0; (t < oc) && (pch != NULL); t++ )
+			        {
+				        sscanf (pch, "%lf\n",&val);
+				        pch = strtok (NULL, " \t,:");
+				        NN.backPushTargets( val );
+				        log_output( "O%d=%f ", t, val );
+			        }
 
-				    dataType lastError = NN.backPropagate( );
+			        dataType lastError = NN.backPropagate( );
 
-				    log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
+			        log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 
-				    log_output( "\n" );
-
-
-		        	printf("\r%1.6f %d", lastError, x+1 );
-		        	//fflush( stdout );
+			        log_output( "\n" );
 
 
+	            	printf("\r%1.6f %d", lastError, x+1 );
+	            	//fflush( stdout );
 
-		        	printf(" %lu ", ++counter );
-		        	fflush( stdout );
+
+
+	            	printf(" %lu ", ++counter );
+	            	fflush( stdout );
 
                     g_counter++;
-			    }
+                }
+		    }
 
-                free( line );
+            free( line );
 
-       			printf("   %d epochs            ", e+1 );
-                fflush( stdout );
+   			printf("   %d epochs            ", e+1 );
+            fflush( stdout );
 
-                NN.store( strWeights.c_str() );
+            NN.store( strWeights.c_str() );
 
-            }
+        }
 
-		}
+		
 
         printf("\n");
 
