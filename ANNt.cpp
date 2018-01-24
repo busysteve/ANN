@@ -18,6 +18,10 @@
 1 1
 */
 
+#define dataType double
+//#define SAFE( x )    safeguard( x )
+#define SAFE( x )    (x)
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -182,7 +186,7 @@ T derivLinear( T n )
 template<typename T>
 T derivSigmoid( T n )
 {
-	return n * ( 1.0 - n );
+	return n * ( (T)1.0 - n );
 }
 
 
@@ -196,8 +200,8 @@ T derivTanh( T n )
 template<typename T>
 T safeguard( T n )
 {
-	return n;
-	//return n != 0.0 ? n : 0.0000000000001;
+	//return n;
+	return n != 0.0 ? n : 0.000001;
 }
 
 
@@ -225,7 +229,7 @@ struct Connection
 
 		T rnd = (T)std::rand() / RAND_MAX;
 
-		weight = rnd + 0.000000001;
+		weight = rnd + 0.000001;
 	}
 
 	void xmit( T in )
@@ -233,8 +237,8 @@ struct Connection
 		if( toNode != nullptr )
 		{
 								 // Apply weight here
-			toNode->in( in * weight );
-			log_verbose( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*weight );
+			toNode->in( in * SAFE(weight) );
+			log_verbose( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*SAFE(weight) );
 		}
 	}
 
@@ -332,7 +336,7 @@ struct Node
 
 };
 
-threadsafe_queue< std::pair< double*, Node<double>* > > node_queue;
+threadsafe_queue< std::pair< dataType*, Node<dataType>* > > node_queue;
 
 
 
@@ -435,7 +439,7 @@ struct Layer
 								 // TODO: Handle more targets
 			netErr +=  ( delta * delta );
 		}
-		netErr /= (T)nc;
+		netErr /= SAFE( (T)nc );
 		netErr = sqrt( netErr );
 
         _lastError = netErr;
@@ -458,11 +462,11 @@ struct Layer
 			for( int c = 0; c < nLayer->nodes[n]->conns.size(); c++ )
 			{
 				T grad = nLayer->nodes[n]->conns[c]->toNode->grad;
-				sum += ( nLayer->nodes[n]->conns[c]->weight ) * grad;
+				sum += ( nLayer->nodes[n]->conns[c]->weight ) * SAFE( grad );
 
 				log_verbose("    sumDOW[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n",
 					nLayer->_name, nLayer->nodes[n]->_name, sum,
-					nLayer->nodes[n]->conns[c]->weight, grad );
+					nLayer->nodes[n]->conns[c]->weight, SAFE( grad ) );
 			}
 		}
 
@@ -532,7 +536,7 @@ struct Layer
 				{
 					Connection<T>* conn = nodes[i]->inConns[c];
 					delta = conn->delta;
-					grad = nodes[i]->grad;
+					grad = SAFE(nodes[i]->grad);
 					//grad = conn->fromNode->grad;
 					//out = nodes[i]->lastOut;
 					out = conn->fromNode->lastOut;
@@ -591,6 +595,11 @@ struct NeuralNet
 		: _learnRate( learn_rate ), _momentum( momentum )
 	{
 	}
+
+    ~NeuralNet()
+    {
+        clear();
+    }
 
 	void setLearnRate( T lr )
 	{
@@ -714,7 +723,7 @@ struct NeuralNet
 	{
 		XMLTag xml("NeuralNet");
 
-		Layer<double>* layer = _inLayer;
+		Layer<dataType>* layer = _inLayer;
 
 		while( layer->nextLayer != NULL || layer == _outLayer )
 		{
@@ -865,7 +874,7 @@ class NodeWorker : public threaded_base_class
 	{
 		while(true)
 		{
-            std::pair< double*, Node<double>* > node_pair;
+            std::pair< dataType*, Node<dataType>* > node_pair;
 
             node_queue.wait_and_pop( node_pair );
 
@@ -893,14 +902,14 @@ int main( int argc, char**argv)
 	srand( time(NULL) );
 
 	std::string strTrainingFile, strInputFile, strWeights ( "temp.weights.xml" );
-	double lr=0.0, mo=0.0;
+	dataType lr=0.0, mo=0.0;
 	int i = 1, training_iterations=1, times=1;
 	FILE *t_fp = NULL, *i_fp = NULL;
 	bool bias = false;
 	bool cont = false;
     bool bDisplayErrors = false;
 
-	NeuralNet<double> NN;
+	NeuralNet<dataType> NN;
 
 	while( i < argc && argv[i][0] == '-' )
 	{
@@ -923,7 +932,7 @@ int main( int argc, char**argv)
 				if( strInputFile == "-" )
 					i_fp = stdin;
 				else				
-					i_fp = fopen( strInputFile.c_str(), "r" );
+					i_fp = fopen( strInputFile.c_str(), "r+" );
 				break;
 			case 'b':
 				++i;
@@ -964,7 +973,10 @@ int main( int argc, char**argv)
 				++i;
 				strTrainingFile = argv[i];
 				++i;
-				t_fp = fopen( strTrainingFile.c_str(), "r" );
+                if( strTrainingFile == "-" )
+                    t_fp = stdin;
+                else
+				    t_fp = fopen( strTrainingFile.c_str(), "r+" );
 				break;
 			case 'e':
 				++i;
@@ -1048,69 +1060,81 @@ int main( int argc, char**argv)
 	if( t_fp != NULL )			 // training file
 	{
 
-		printf("\n");
+		//printf("\n");
 
 
-		for( int e=0; e < training_iterations; e++ )
+        unsigned long counter=0;
+
+		for( int x = 0; x < times; x++ )
 		{
-			fseek( t_fp, 0, SEEK_SET );
 
 			int ic = NN.getInputNodeCount();
 			int oc = NN.getOutputNodeCount();
-			char *line = NULL;
-			size_t len = 0;
 			ssize_t read;
 			char *pch;
 
-			char tmpline[1024];
+			//char tmpline[1024];
 
-			int counter = 0;
+            for( int e=0; e < training_iterations; e++ )
+            {
+			    fseek( t_fp, 0, SEEK_SET );
 
-			while( (read = getline(&line, &len, t_fp)) != -1 )
-			{
-				// Cycle inputs
-				memcpy( tmpline, line, len+1 );
+			    char *line = NULL;
+			    size_t len = 0;
 
-				for( int x = 0; x < times; x++ )
-				{
-					double val;
-					pch = strtok (line," \t,:");
-					for( int t=0; (t < ic) && (pch != NULL); t++ )
-					{
-						sscanf (pch, "%lf\n",&val);
-						pch = strtok (NULL, " \t,:");
-						NN.setInput( t, val );
-						log_output( "I%d=%f ", t, val );
-					}
-					NN.cycle();
+			    while( (read = getline(&line, &len, t_fp)) != -1 )
+			    {
 
-					// Set targets for back propagation (training)
-					for( int t=0; (t < oc) && (pch != NULL); t++ )
-					{
-						sscanf (pch, "%lf\n",&val);
-						pch = strtok (NULL, " \t,:");
-						NN.backPushTargets( val );
-						log_output( "O%d=%f ", t, val );
-					}
+				    // Cycle inputs
+				    //memcpy( tmpline, line, len+1 );
 
-					double lastError = NN.backPropagate( );
+				    dataType val;
+				    pch = strtok (line," \t,:");
+				    for( int t=0; (t < ic) && (pch != NULL); t++ )
+				    {
+					    sscanf (pch, "%f\n",&val);
+					    pch = strtok (NULL, " \t,:");
+					    NN.setInput( t, val );
+					    log_output( "I%d=%f ", t, val );
+				    }
+				    NN.cycle();
 
-					log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
+				    // Set targets for back propagation (training)
+				    for( int t=0; (t < oc) && (pch != NULL); t++ )
+				    {
+					    sscanf (pch, "%f\n",&val);
+					    pch = strtok (NULL, " \t,:");
+					    NN.backPushTargets( val );
+					    log_output( "O%d=%f ", t, val );
+				    }
 
-					log_output( "\n" );
+				    dataType lastError = NN.backPropagate( );
 
-					g_counter++;
+				    log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 
-			    	printf("\r%1.6f %d", lastError, x );
-			    	fflush( stdout );
-				}
+				    log_output( "\n" );
 
-		    	printf(" %d", ++counter );
-		    	fflush( stdout );
-			}
 
-			printf(" %d               ", e );
-			fflush( stdout );
+		        	printf("\r%1.6f %d", lastError, x+1 );
+		        	//fflush( stdout );
+
+
+
+		        	printf(" %lu ", ++counter );
+		        	fflush( stdout );
+
+
+			    }
+
+                free( line );
+
+       			printf("   %d epochs            ", e+1 );
+                fflush( stdout );
+
+
+                //if( feof( t_fp ) == 0 )
+                //    break;
+            }
 
 		}
 
@@ -1142,11 +1166,11 @@ int main( int argc, char**argv)
 		while( (read = getline(&line, &len, i_fp)) != -1 )
 		{
 			// Cycle inputs
-			double val;
+			dataType val;
 			pch = strtok (line," \t,:");
 			for( int t=0; (t < ic) && (pch != NULL); t++ )
 			{
-				sscanf (pch, "%lf\n",&val);
+				sscanf (pch, "%f\n",&val);
 				pch = strtok (NULL, " \t,:");
 				NN.setInput( t, val );
 				log_output( "i%d=%f ", t, val );
@@ -1168,6 +1192,8 @@ int main( int argc, char**argv)
 		}
 
 	}
+                
+
 
 	return 0;
 };
