@@ -19,8 +19,8 @@
 */
 
 #define dataType double
-//#define SAFE( x )    safeguard( x )
-#define SAFE( x )    (x)
+#define SAFE( x )    safeguard( x )
+//#define SAFE( x )    (x)
 
 #include <iostream>
 #include <vector>
@@ -1092,17 +1092,17 @@ int main( int argc, char**argv)
 				    pch = strtok (line," \t,:");
 				    for( int t=0; (t < ic) && (pch != NULL); t++ )
 				    {
-					    sscanf (pch, "%f\n",&val);
+					    sscanf (pch, "%lf\n",&val);
 					    pch = strtok (NULL, " \t,:");
 					    NN.setInput( t, val );
-					    log_output( "I%d=%f ", t, val );
+					    log_output( "I%d=%lf ", t, val );
 				    }
 				    NN.cycle();
 
 				    // Set targets for back propagation (training)
 				    for( int t=0; (t < oc) && (pch != NULL); t++ )
 				    {
-					    sscanf (pch, "%f\n",&val);
+					    sscanf (pch, "%lf\n",&val);
 					    pch = strtok (NULL, " \t,:");
 					    NN.backPushTargets( val );
 					    log_output( "O%d=%f ", t, val );
@@ -1123,7 +1123,7 @@ int main( int argc, char**argv)
 		        	printf(" %lu ", ++counter );
 		        	fflush( stdout );
 
-
+                    g_counter++;
 			    }
 
                 free( line );
@@ -1131,9 +1131,8 @@ int main( int argc, char**argv)
        			printf("   %d epochs            ", e+1 );
                 fflush( stdout );
 
+                NN.store( strWeights.c_str() );
 
-                //if( feof( t_fp ) == 0 )
-                //    break;
             }
 
 		}
@@ -1141,7 +1140,7 @@ int main( int argc, char**argv)
         printf("\n");
 
 	//	if( cont != true )
-			NN.store( strWeights.c_str() );
+			
 
 	}
 	else
@@ -1170,7 +1169,7 @@ int main( int argc, char**argv)
 			pch = strtok (line," \t,:");
 			for( int t=0; (t < ic) && (pch != NULL); t++ )
 			{
-				sscanf (pch, "%f\n",&val);
+				sscanf (pch, "%lf\n",&val);
 				pch = strtok (NULL, " \t,:");
 				NN.setInput( t, val );
 				log_output( "i%d=%f ", t, val );
