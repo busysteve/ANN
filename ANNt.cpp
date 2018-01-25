@@ -264,9 +264,9 @@ struct Connection
 
 		sprintf( _name, "C-%s-%s", fromNode->_name, toNode->_name );
 
-		T rnd = (T)std::rand() / RAND_MAX;
+		T rnd = (T)std::rand() / (T)RAND_MAX;
 
-		weight = rnd + 0.000000001;
+		weight = rnd + 0.000001;
 	}
 
 	void xmit( T in )
@@ -1095,28 +1095,36 @@ int main( int argc, char**argv)
 				{
 					for( ; i < argc; i++ )
 					{
-						switch( argv[i][0] )
+                        int b=0;
+                        bool bias = false;
+
+                        if( argv[i][b] == 'b' )
+                            b=1; 
+                        if( b == 1 )
+                            bias = true;
+
+						switch( argv[i][b++] )
 						{
 							case 'L':
-								NN.addLayer( atoi( &argv[i][1] ), linear, bias );
+								NN.addLayer( atoi( &argv[i][b] ), linear, bias );
 								break;
 							case 'S':
-								NN.addLayer( atoi( &argv[i][1] ), sigmoid, bias );
+								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias );
 								break;
 							case 'T':
-								NN.addLayer( atoi( &argv[i][1] ), tangenth, bias );
+								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias );
 								break;
 							case 'R':
-								NN.addLayer( atoi( &argv[i][1] ), relu, bias );
+								NN.addLayer( atoi( &argv[i][b] ), relu, bias );
 								break;
 							case 'r':
-								NN.addLayer( atoi( &argv[i][1] ), relul, bias );
+								NN.addLayer( atoi( &argv[i][b] ), relul, bias );
 								break;
 							case 'P':
-								NN.addLayer( atoi( &argv[i][1] ), softplus, bias );
+								NN.addLayer( atoi( &argv[i][b] ), softplus, bias );
 								break;
 							case 'N':
-								NN.addLayer( atoi( &argv[i][1] ), none, bias );
+								NN.addLayer( atoi( &argv[i][b] ), none, bias );
 								break;
 							case '-':
 								break;
