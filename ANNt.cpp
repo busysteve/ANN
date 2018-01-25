@@ -139,7 +139,7 @@ public:
 
 //======================================================================================
 
-enum ActType{ linear = 0, sigmoid, tangenth, relu, softplus, none, bias };
+enum ActType{ linear = 0, sigmoid, tangenth, relu, relul, softplus, none, bias };
 
 template<typename T>
 T actNone( T n )
@@ -178,8 +178,13 @@ T actTanh( T n )
 template<typename T>
 T actReLU( T n )
 {
-	//return (n > 0.0) ? n : 0.0;
-	return (n < 0.0) ? 0.0 : (n + .000000001);
+	return (n > 0.0) ? n : 0.0;
+}
+
+template<typename T>
+T actReLUL( T n )
+{
+	return (n > 0.0) ? n : (n*.001);
 }
 
 template<typename T>
@@ -213,6 +218,13 @@ template<typename T>
 T derivReLU( T n )
 {
 	return (n > 0.0) ? 1.0 : 0.0;
+}
+
+template<typename T>
+T derivReLUL( T n )
+{
+	return 1.0;
+	//return (n > 0.0) ? 1.0 : 0.0;
 }
 
 template<typename T>
@@ -423,6 +435,11 @@ struct Layer
 		{
 			_actFunc = actReLU<T>;
 			_derivActFunc = derivReLU<T>;
+		}
+		else if( act == relul )
+		{
+			_actFunc = actReLUL<T>;
+			_derivActFunc = derivReLUL<T>;
 		}
 		else if( act == none )
 		{
@@ -797,6 +814,10 @@ struct NeuralNet
 			{
 				activation = "relu";
 			}
+			else if( act == relul )
+			{
+				activation = "relul";
+			}
 			else if( act == none )
 			{
 				activation = "none";
@@ -861,9 +882,11 @@ struct NeuralNet
 				pLayer = addLayer( count, sigmoid, bias );
 			else if( activation[0] == 't' )
 				pLayer = addLayer( count, tangenth, bias );
-			else if( activation[0] == 'r' )
+			else if( activation == "relu" ) 
 				pLayer = addLayer( count, relu, bias );
-			else if( activation.length() > 5 && activation[4] == 'p' ) 
+			else if( activation == "relul" ) 
+				pLayer = addLayer( count, relul, bias );
+			else if( activation == "softplus" ) 
 				pLayer = addLayer( count, softplus, bias );
 		}
 
@@ -960,7 +983,7 @@ int main( int argc, char**argv)
     bool bDisplayErrors = false;
     bool store_every_time = false;
     bool one_or_zero = false;
-
+    dataType errorStopLearning = 0.0;
 	NeuralNet<dataType> NN;
 
 	while( i < argc && argv[i][0] == '-' )
@@ -973,12 +996,15 @@ int main( int argc, char**argv)
 				break;
 			case 'S':
 				++i;
-                store_every_time = true;
+				errorStopLearning = atof(argv[i]);
+				++i;
 				break;
 			case 'E':
 				++i;
                 bDisplayErrors = true;
 				break;
+			case 'W':
+                store_every_time = true;
 			case 'w':
 				++i;
 				strWeights = argv[i];
@@ -988,7 +1014,6 @@ int main( int argc, char**argv)
 				++i;
 				strInputFile = argv[i];
 				++i;
-
 				if( strInputFile == "-" )
 					i_fp = stdin;
 				else				
@@ -1084,6 +1109,9 @@ int main( int argc, char**argv)
 							case 'R':
 								NN.addLayer( atoi( &argv[i][1] ), relu, bias );
 								break;
+							case 'r':
+								NN.addLayer( atoi( &argv[i][1] ), relul, bias );
+								break;
 							case 'P':
 								NN.addLayer( atoi( &argv[i][1] ), softplus, bias );
 								break;
@@ -1093,7 +1121,7 @@ int main( int argc, char**argv)
 							case '-':
 								break;
 							default:
-								printf( "Layer types must be L, S or T prefixed to the Node count.\n" );
+								printf( "Layer types must be L, S, R, r, P or T prefixed to the Node count.\n" );
 								exit(1);
 						}
 					}
@@ -1145,6 +1173,7 @@ int main( int argc, char**argv)
 
 		    char *line = NULL;
 		    size_t len = 0;
+            dataType lastError;
 
 		    while( (read = getline(&line, &len, t_fp)) != -1 )
 		    {
@@ -1174,7 +1203,7 @@ int main( int argc, char**argv)
 				        log_output( "O%d=%f ", t, val );
 			        }
 
-			        dataType lastError = NN.backPropagate( );
+			        lastError = NN.backPropagate( );
 
 			        log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 
@@ -1200,7 +1229,10 @@ int main( int argc, char**argv)
 
             if( store_every_time == true )
                 NN.store( strWeights.c_str() );
-
+        
+            if( errorStopLearning > 0.0 )
+                if( lastError <= errorStopLearning )
+                    break;
         }
 
         if( store_every_time == false )
