@@ -19,8 +19,8 @@
 */
 
 #define dataType double
-#define SAFE( x )    safeguard( x )
-//#define SAFE( x )    (x)
+//#define SAFE( x )    safeguard( x )
+#define SAFE( x )    (x)
 
 #include <iostream>
 #include <vector>
@@ -139,7 +139,7 @@ public:
 
 //======================================================================================
 
-enum ActType{ linear = 0, sigmoid, tangenth, none, bias };
+enum ActType{ linear = 0, sigmoid, tangenth, relu, softplus, none, bias };
 
 template<typename T>
 T actNone( T n )
@@ -175,6 +175,18 @@ T actTanh( T n )
 	return tanh( n );
 }
 
+template<typename T>
+T actReLU( T n )
+{
+	return (n > 0.0) ? n : 0.0;
+}
+
+template<typename T>
+T actSoftPlus( T n )
+{
+	return log( 1 + exp(n) );
+}
+
 
 template<typename T>
 T derivLinear( T n )
@@ -196,12 +208,24 @@ T derivTanh( T n )
 	return 1.0 - n * n;
 }
 
+template<typename T>
+T derivReLU( T n )
+{
+	return (n > 0.0) ? 1.0 : 0.0;
+}
+
+template<typename T>
+T derivSoftPlus( T n )
+{
+	return 1.0 / ( 1.0 + exp( -(n) ) );
+}
+
 
 template<typename T>
 T safeguard( T n )
 {
 	//return n;
-	return n != 0.0 ? n : 0.000001;
+	return n != 0.0 ? n : 0.000000001;
 }
 
 
@@ -229,7 +253,7 @@ struct Connection
 
 		T rnd = (T)std::rand() / RAND_MAX;
 
-		weight = rnd + 0.000001;
+		weight = rnd + 0.000000001;
 	}
 
 	void xmit( T in )
@@ -389,6 +413,16 @@ struct Layer
 			_actFunc = actTanh<T>;
 			_derivActFunc = derivTanh<T>;
 		}
+		else if( act == softplus )
+		{
+			_actFunc = actSoftPlus<T>;
+			_derivActFunc = derivSoftPlus<T>;
+		}
+		else if( act == relu )
+		{
+			_actFunc = actReLU<T>;
+			_derivActFunc = derivReLU<T>;
+		}
 		else if( act == none )
 		{
 			_actFunc = actNone<T>;
@@ -438,8 +472,11 @@ struct Layer
 			delta = targets[i] - nodes[i]->lastOut;
 								 // TODO: Handle more targets
 			netErr +=  ( delta * delta );
+            //printf( "%f ", delta * delta );
 		}
-		netErr /= SAFE( (T)nc );
+        //printf( "\n" );
+
+		netErr /= (T)nc;
 		netErr = sqrt( netErr );
 
         _lastError = netErr;
@@ -747,9 +784,17 @@ struct NeuralNet
 			{
 				activation = "sigmoid";
 			}
+			else if( act == softplus )
+			{
+				activation = "softplus";
+			}
 			else if( act == tangenth )
 			{
 				activation = "tangenth";
+			}
+			else if( act == relu )
+			{
+				activation = "relu";
 			}
 			else if( act == none )
 			{
@@ -815,6 +860,10 @@ struct NeuralNet
 				pLayer = addLayer( count, sigmoid, bias );
 			else if( activation[0] == 't' )
 				pLayer = addLayer( count, tangenth, bias );
+			else if( activation[0] == 'r' )
+				pLayer = addLayer( count, relu, bias );
+			else if( activation.length() > 5 && activation[4] == 'p' ) 
+				pLayer = addLayer( count, softplus, bias );
 		}
 
 		try
@@ -894,7 +943,7 @@ int main( int argc, char**argv)
 	{
 		printf("\nusage: ann -w [(r/w)weights (restore) file name] [-i input file ] { -t training_file -x training_iterations -r learn_rate -m momentum -l [Layer spec] }\n");
 		printf("\nexample: ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -x 10 -i input.txt -l S2 S3 S2 S1\n\n");
-		printf( "Layer types must be L, S, T, C, or e prefixed to the Node count.\n" );
+		printf( "Layer types must be L, S, T, R, or e prefixed to the Node count.\n" );
 
 		exit(1);
 	}
@@ -908,6 +957,8 @@ int main( int argc, char**argv)
 	bool bias = false;
 	bool cont = false;
     bool bDisplayErrors = false;
+    bool store_every_time = false;
+    bool one_or_zero = false;
 
 	NeuralNet<dataType> NN;
 
@@ -915,6 +966,14 @@ int main( int argc, char**argv)
 	{
 		switch( argv[i][1] )
 		{
+			case '1':
+				++i;
+                one_or_zero = true;
+				break;
+			case 'S':
+				++i;
+                store_every_time = true;
+				break;
 			case 'E':
 				++i;
                 bDisplayErrors = true;
@@ -1020,6 +1079,12 @@ int main( int argc, char**argv)
 								break;
 							case 'T':
 								NN.addLayer( atoi( &argv[i][1] ), tangenth, bias );
+								break;
+							case 'R':
+								NN.addLayer( atoi( &argv[i][1] ), relu, bias );
+								break;
+							case 'P':
+								NN.addLayer( atoi( &argv[i][1] ), softplus, bias );
 								break;
 							case 'N':
 								NN.addLayer( atoi( &argv[i][1] ), none, bias );
@@ -1132,11 +1197,13 @@ int main( int argc, char**argv)
    			printf("   %d epochs            ", e+1 );
             fflush( stdout );
 
-            NN.store( strWeights.c_str() );
+            if( store_every_time == true )
+                NN.store( strWeights.c_str() );
 
         }
 
-		
+        if( store_every_time == false )
+            NN.store( strWeights.c_str() );
 
         printf("\n");
 
@@ -1182,7 +1249,11 @@ int main( int argc, char**argv)
 			for( int t=0; (t < oc); t++ )
 			{
 				log_output( "o%d=", t );
-				printf( "%f ", NN.getOutput(t) );
+                if( one_or_zero == false )
+				    printf( "%f ", NN.getOutput(t) );
+                else
+                    printf( "%d ", NN.getOutput(t) >= 0.5 ? 1 : 0 );
+
 				fflush( stdout );
 			}
 
