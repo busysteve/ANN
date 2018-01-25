@@ -178,7 +178,8 @@ T actTanh( T n )
 template<typename T>
 T actReLU( T n )
 {
-	return (n > 0.0) ? n : 0.0;
+	//return (n > 0.0) ? n : 0.0;
+	return (n < 0.0) ? 0.0 : (n + .000000001);
 }
 
 template<typename T>
