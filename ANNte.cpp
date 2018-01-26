@@ -238,7 +238,8 @@ template<typename T>
 T safeguard( T n )
 {
 	//return n;
-	return n != 0.0 ? n : 0.000000001;
+	//return n != 0.0 ? n : 0.000000001;
+	return n != 0.0 ? n : 1.0;
 }
 
 
@@ -490,13 +491,14 @@ struct Layer
 			//delta = targets[i] - nodes[i]->lastOut;
 			delta = nodes[i]->lastOut - targets[i];
 								 // TODO: Handle more targets
-			netErr +=  ( delta * delta ) / 2.0;
+			netErr +=  ( delta * delta );
             //printf( "%f ", delta * delta );
 		}
+        //printf( "%f ", netErr );
         //printf( "\n" );
 
-		//netErr /= (T)nc;
-		//netErr = sqrt( netErr );
+		netErr /= (T)nc;
+		netErr = sqrt( netErr );
 
         _lastError = netErr;
 
@@ -576,7 +578,7 @@ struct Layer
 
 		if( prevLayer != NULL )
 			if( prevLayer->prevLayer != NULL )
-								 // target not used in the following calls
+				// targets param not used in the recursive calls
 				prevLayer->calcGradient(targets);
 	}
 
