@@ -33,14 +33,14 @@
 
 //#define log_verbose
 //#define log_verbose   printf
-#define log_verbose  if( g_verbose > 0 ) if( g_counter%g_verbose == 0 ) printf
+#define log_verbose  if( _verbose > 0 ) if( g_counter%_verbose == 0 ) printf
 
-#define log_output  if( g_output > 0 ) if( g_counter%g_output == 0 ) printf
+#define log_output  if( _output > 0 ) if( g_counter%_output == 0 ) printf
 
 #define MAX_NN_NAME 30
 
-int g_output = 0;
-int g_verbose = 0;
+int _output = 0;
+int _verbose = 0;
 int g_counter = 0;
 int g_threadcount = 0;
 
@@ -253,13 +253,13 @@ struct Connection
 {
 
 	T weight, alpha, delta;
-
+    int _verbose, _output;
 	Node<T> *fromNode, *toNode;
 
 	char _name[MAX_NN_NAME];
 
-	Connection( Node<T>* fNode, Node<T>* tNode )
-		: fromNode( fNode ), toNode( tNode ), alpha((T)1.0), delta((T)0.0)
+	Connection( Node<T>* fNode, Node<T>* tNode, int verbose = 0, int output = 0 )
+		: fromNode( fNode ), toNode( tNode ), alpha((T)1.0), delta((T)0.0), _verbose(verbose), _output(output)
 	{
 
 		sprintf( _name, "C-%s-%s", fromNode->_name, toNode->_name );
@@ -298,16 +298,18 @@ struct Node
 
 	bool _activate;
 
+    int _verbose, _output;
+
 	//ActType _activation;
 
 	typedef T ( *ActFunc )(T);
 
 	ActFunc _actFunc;
 
-	Node( ActFunc actFunc, bool bias, char* name ) :
+	Node( ActFunc actFunc, bool bias, char* name, int verbose = 0, int output = 0 ) :
 	inSum((T)0.0), lastOut((T)0.0),
 		deltaErr((T)0.0), grad((T)1.0),
-		_actFunc(actFunc), _bias(bias), _activate(false)
+		_actFunc(actFunc), _bias(bias), _activate(false), _verbose(verbose), _output(output)
 	{
 		sprintf(_name, "%s", name );
 	}
@@ -333,7 +335,7 @@ struct Node
 	// Node to bind to (next layer node)
 	void bindNode( Node<T>* node )
 	{
-		Connection<T>* pConn = new Connection<T>( this, node );
+		Connection<T>* pConn = new Connection<T>( this, node, _verbose, _output );
 		conns.push_back( pConn );
 		node->inConns.push_back( pConn );
 	}
@@ -397,16 +399,16 @@ struct Layer
 	actFunc _actFunc;
 
 	bool _bias;
-
+    int  _verbose, _output, _from, _to;
 	int count;
 
 	T sumIn;
 
     T _lastError;
 
-	Layer( int n, ActType act, bool bias, char* name )
+	Layer( int n, ActType act, bool bias, char* name, int verbose = 0, int output = 0, int from = 0, int to = 0 )
 		: count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias),
-		sumIn(0.0), _lastError(0.0)
+		sumIn(0.0), _lastError(0.0), _verbose(verbose), _output(output), _from(from), _to(to)
 	{
 
 		strcpy( _name, name );
@@ -451,6 +453,8 @@ struct Layer
 		{
 			char tmpname[MAX_NN_NAME];
 			sprintf(tmpname, "N%d-%s", (int)nodes.size(), _name );
+            
+            if( ( _from == 0 && _to == 0) || ( _from <= i && _to >= i ) )
 			nodes.push_back( new Node<T>( _actFunc, false, tmpname ) );
 		}
 
@@ -459,7 +463,8 @@ struct Layer
 			char tmpname[MAX_NN_NAME];
 			sprintf(tmpname, "B%d-%s", (int)nodes.size(), _name );
 			//nodes.push_back( new Node<T>( _actFunc, true, tmpname ) );
-			nodes.push_back( new Node<T>( actBias<T>, true, tmpname ) );
+
+			nodes.push_back( new Node<T>( actBias<T>, true, tmpname, _verbose, _output ) );
 			//_derivActFunc = actBias<T>;
 			//_derivActFunc = actBias<T>;
 		}
@@ -687,7 +692,7 @@ struct NeuralNet
 		layers.clear();
 	}
 
-	Layer<T>* addLayer( int n, ActType act, bool bias )
+	Layer<T>* addLayer( int n, ActType act, bool bias, int verbose = 0, int output = 0, int from = 0, int to = 0 )
 	{
 		if( n < 1 )
 			return NULL;
@@ -698,7 +703,7 @@ struct NeuralNet
 
 		sprintf( name, "L%d", (int)layers.size() );
 
-		layers.push_back( pl = new Layer<T>(n, act, bias, name ) );
+		layers.push_back( pl = new Layer<T>(n, act, bias, name, verbose, output, from, to ) );
 
 		int size = layers.size();
 
@@ -1034,10 +1039,10 @@ int main( int argc, char**argv)
 				break;
 			case 'v':
 				++i;
-				g_verbose = 1;
+				_verbose = 1;
 				if( argv[i][0] != '-' )
 				{
-					g_verbose = atoi( argv[i] );
+					_verbose = atoi( argv[i] );
 				}
 				++i;
 				break;
@@ -1052,10 +1057,10 @@ int main( int argc, char**argv)
 				break;
 			case 'o':
 				++i;
-				g_output = 1;
+				_output = 1;
 				if( argv[i][0] != '-' )
 				{
-					g_output = atoi( argv[i] );
+					_output = atoi( argv[i] );
 				}
 				++i;
 				break;
@@ -1277,7 +1282,7 @@ int main( int argc, char**argv)
 		ssize_t read;
 		char *pch;
 
-		if( g_output > 0 ) g_output = 1;
+		//if( g_output > 0 ) g_output = 1;
 
 		while( (read = getline(&line, &len, i_fp)) != -1 )
 		{
