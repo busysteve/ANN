@@ -361,11 +361,11 @@ struct Node
 
 		if( _bias )
 		{
-			log_verbose( "[%s](in=%f)--------- bias --------(out=%f)\n", _name, inSum, lastOut );
+			log_output( "[%s](in=%f)--------- bias --------(out=%f)\n", _name, inSum, lastOut );
 		}
 		else
 		{
-			log_verbose( "[%s](in=%f)-----------------------(out=%f)\n", _name, inSum, lastOut );
+			log_output( "[%s](in=%f)-----------------------(out=%f)\n", _name, inSum, lastOut );
 		}
 
 		inSum = (T)0.0;
@@ -1127,6 +1127,9 @@ int main( int argc, char**argv)
 				{
 					for( ; i < argc; i++ )
 					{
+                        int verbose = 0;
+                        int output = 0;
+
                         int b=0;
                         bool bias = false;
 
@@ -1174,28 +1177,34 @@ int main( int argc, char**argv)
 
                         //printf("\n\n ****** %s ****** \n\n", &argv[i][b] );
 
+                        if( from > 0 || to > 0 )
+                        {
+                            verbose = _verbose;
+                            output = _output;
+                        }
+
 						switch( argv[i][b++] )
 						{
 							case 'L':
-								NN.addLayer( atoi( &argv[i][b] ), linear, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), linear, bias, verbose, output, from, to );
 								break;
 							case 'S':
-								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias, verbose, output, from, to );
 								break;
 							case 'T':
-								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias, verbose, output, from, to );
 								break;
 							case 'R':
-								NN.addLayer( atoi( &argv[i][b] ), relu, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), relu, bias, verbose, output, from, to );
 								break;
 							case 'r':
-								NN.addLayer( atoi( &argv[i][b] ), relul, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), relul, bias, verbose, output, from, to );
 								break;
 							case 's':
-								NN.addLayer( atoi( &argv[i][b] ), softplus, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), softplus, bias, verbose, output, from, to );
 								break;
 							case 'N':
-								NN.addLayer( atoi( &argv[i][b] ), none, bias, _verbose, _output, from, to );
+								NN.addLayer( atoi( &argv[i][b] ), none, bias, verbose, output, from, to );
 								break;
 							case '-':
 								break;
