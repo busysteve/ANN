@@ -454,8 +454,10 @@ struct Layer
 			char tmpname[MAX_NN_NAME];
 			sprintf(tmpname, "N%d-%s", (int)nodes.size(), _name );
             
-            if( ( _from == 0 && _to == 0) || ( _from <= i && _to >= i ) )
-			nodes.push_back( new Node<T>( _actFunc, false, tmpname ) );
+            if( ( _verbose || _output ) && ( _from == 0 && _to == 0) || ( _from >= i && _to <= i ) )
+			    nodes.push_back( new Node<T>( _actFunc, false, tmpname, _verbose, _output ) );
+            else
+			    nodes.push_back( new Node<T>( _actFunc, false, tmpname ) );
 		}
 
 		if( bias == true )
@@ -488,6 +490,7 @@ struct Layer
 	{
 		T netErr = (T)0.0, delta;
 								 // minus bias
+#if 0
 		int nc = nodes.size()-(_bias?1:0);
 		for( int i=0; i<nc; i++ )
 		{
@@ -502,7 +505,22 @@ struct Layer
 
 		//netErr /= (T)nc;
 		//netErr = sqrt( netErr );
+#else
+		int nc = nodes.size()-(_bias?1:0);
+		for( int i=0; i<nc; i++ )
+		{
+								 // TODO // handle proper target count!!!!
+			//delta = targets[i] - nodes[i]->lastOut;
+			delta = nodes[i]->lastOut - targets[i];
+								 // TODO: Handle more targets
+			netErr +=  ( delta * delta );  // / 2.0;
+            //printf( "%f ", delta * delta );
+		}
+        //printf( "\n" );
 
+		netErr /= (T)nc;
+		netErr = sqrt( netErr );
+#endif
         _lastError = netErr;
 
 		return netErr;
@@ -1117,28 +1135,67 @@ int main( int argc, char**argv)
                         if( b == 1 )
                             bias = true;
 
+                        int from = 0, to = 0;;
+
+                        int x = 0;
+                        int len=0;
+
+                        for( len=x=strlen(argv[i]); x > 0; x-- )
+                        {
+                            if( argv[i][x] == '@' )
+                            { 
+                                to = from = x+1;
+                                argv[i][x] = '\0';
+                                break;
+                            }
+                        }
+
+                        for( x=len; x > from; x-- )
+                        {
+                            if( argv[i][x] == '-' )
+                            { 
+                                to = x+1;
+                                argv[i][x] = '\0';
+                                break;
+                            }
+                        }
+
+                        if( to >= from )
+                        {
+                            to = atoi(&argv[i][to]);
+                            //printf(" to=%d ", to );
+                        }
+
+                        if( from > 0 )
+                        {
+                            from = atoi(&argv[i][from]);
+                            //printf(" from=%d ", from );
+                        }
+
+                        //printf("\n\n ****** %s ****** \n\n", &argv[i][b] );
+
 						switch( argv[i][b++] )
 						{
 							case 'L':
-								NN.addLayer( atoi( &argv[i][b] ), linear, bias );
+								NN.addLayer( atoi( &argv[i][b] ), linear, bias, _verbose, _output, from, to );
 								break;
 							case 'S':
-								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias );
+								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias, _verbose, _output, from, to );
 								break;
 							case 'T':
-								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias );
+								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias, _verbose, _output, from, to );
 								break;
 							case 'R':
-								NN.addLayer( atoi( &argv[i][b] ), relu, bias );
+								NN.addLayer( atoi( &argv[i][b] ), relu, bias, _verbose, _output, from, to );
 								break;
 							case 'r':
-								NN.addLayer( atoi( &argv[i][b] ), relul, bias );
+								NN.addLayer( atoi( &argv[i][b] ), relul, bias, _verbose, _output, from, to );
 								break;
 							case 's':
-								NN.addLayer( atoi( &argv[i][b] ), softplus, bias );
+								NN.addLayer( atoi( &argv[i][b] ), softplus, bias, _verbose, _output, from, to );
 								break;
 							case 'N':
-								NN.addLayer( atoi( &argv[i][b] ), none, bias );
+								NN.addLayer( atoi( &argv[i][b] ), none, bias, _verbose, _output, from, to );
 								break;
 							case '-':
 								break;
