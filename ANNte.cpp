@@ -1342,7 +1342,7 @@ int main( int argc, char**argv)
    			printf("   %d epochs            ", e+1 );
             fflush( stdout );
 
-            if(  (e+1) % store_every_time == 0 )
+            if(  store_every_time != 0 && ( (e+1) % store_every_time == 0) )
             {
                 if( store_every_time < 0 )
                 {
