@@ -618,10 +618,15 @@ struct Layer
 	{
 		// Update weights
 		T alpha, delta, grad, out, weight;
+		T weightSum, weightFactor;
 		if( prevLayer != NULL /* || layer == _inLayer */ )
 		{
 			for( int i=nodes.size()-1; i>=0; i-- )
 			{
+
+				//for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
+                //    weightSum += nodes[i]->inConns[c]->weight;
+
 				for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
 				{
 					Connection<T>* conn = nodes[i]->inConns[c];
@@ -631,6 +636,8 @@ struct Layer
 					//out = nodes[i]->lastOut;
 					out = conn->fromNode->lastOut;
 					weight = conn->weight;
+
+                    //weightFactor = weight / weightSum;
 
 					delta = learnRate * grad * out + momentum * delta;
 
@@ -1318,7 +1325,7 @@ int main( int argc, char**argv)
 			        log_output( "\n" );
 
 
-	            	printf("\r%1.6f %d", lastError, x+1 );
+	            	printf("\r%1.12f %d", lastError, x+1 );
 	            	//fflush( stdout );
 
 
@@ -1335,9 +1342,22 @@ int main( int argc, char**argv)
    			printf("   %d epochs            ", e+1 );
             fflush( stdout );
 
-            if( store_every_time % (training_iterations+1) == 0 )
-                NN.store( strWeights.c_str() );
-        
+            if(  (e+1) % store_every_time == 0 )
+            {
+                if( store_every_time < 0 )
+                {
+                    char epch[255];
+                    sprintf( epch, "-%06d", e+1 );
+                    NN.store( (strWeights+epch).c_str() );
+                    printf("  -  Stored Weights in %s\n", (strWeights+epch).c_str() );
+                }
+                else
+                {
+                    NN.store( strWeights.c_str() );
+                    printf("  -  Stored Weights in %s\n", strWeights.c_str() );
+                }
+            }
+
             if( errorStopLearning > 0.0 )
                 if( lastError <= errorStopLearning )
                     break;
