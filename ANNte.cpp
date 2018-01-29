@@ -139,7 +139,7 @@ public:
 
 //======================================================================================
 
-enum ActType{ linear = 0, sigmoid, tangenth, relu, relul, softplus, none, bias };
+enum ActType{ linear = 0, sigmoid, tangenth, relu, relul, softMax, none, bias };
 
 template<typename T>
 T actNone( T n )
@@ -168,6 +168,12 @@ T actSigmoid( T n )
 	return 1.0 / ( 1.0 + exp(-n) );
 }
 
+template<typename T>
+T actSoftMax( T n )
+{
+	return exp(n);
+}
+
 
 template<typename T>
 T actTanh( T n )
@@ -187,12 +193,6 @@ T actReLUL( T n )
 	return (n > 0.0) ? n : (n*.001);
 }
 
-template<typename T>
-T actSoftPlus( T n )
-{
-	return log( 1 + exp(n) );
-}
-
 
 template<typename T>
 T derivLinear( T n )
@@ -203,6 +203,12 @@ T derivLinear( T n )
 
 template<typename T>
 T derivSigmoid( T n )
+{
+	return n * ( (T)1.0 - n );
+}
+
+template<typename T>
+T derivSoftMax( T n )
 {
 	return n * ( (T)1.0 - n );
 }
@@ -227,19 +233,12 @@ T derivReLUL( T n )
 	//return (n > 0.0) ? 1.0 : 0.0;
 }
 
-template<typename T>
-T derivSoftPlus( T n )
-{
-	return 1.0 / ( 1.0 + exp( -(n) ) );
-}
-
 
 template<typename T>
 T safeguard( T n )
 {
 	//return n;
-	//return n != 0.0 ? n : 0.000000001;
-	return n != 0.0 ? n : 1.0;
+	return n != 0.0 ? n : 0.000000001;
 }
 
 
@@ -276,7 +275,7 @@ struct Connection
 		{
 								 // Apply weight here
 			toNode->in( in * SAFE(weight) );
-			log_verbose( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*SAFE(weight) );
+			log_output( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*SAFE(weight) );
 		}
 	}
 
@@ -291,7 +290,7 @@ struct Node
 	T deltaErr;
 	T grad;
 	bool _bias;
-
+    Layer<T>* _parentLayer;
 	char _name[MAX_NN_NAME];
 
 	std::vector<Connection<T>*> conns;
@@ -307,8 +306,8 @@ struct Node
 
 	ActFunc _actFunc;
 
-	Node( ActFunc actFunc, bool bias, char* name, int verbose = 0, int output = 0 ) :
-	inSum((T)0.0), lastOut((T)0.0),
+	Node( Layer<T>* layer, ActFunc actFunc, bool bias, char* name, int verbose = 0, int output = 0 ) :
+	    _parentLayer(layer), inSum((T)0.0), lastOut((T)0.0),
 		deltaErr((T)0.0), grad((T)1.0),
 		_actFunc(actFunc), _bias(bias), _activate(false), _verbose(verbose), _output(output)
 	{
@@ -345,7 +344,15 @@ struct Node
 	{
 		if( _activate || _bias)
 		{
-			lastOut = _actFunc( inSum );
+            if( _parentLayer->_activation == softMax )
+            {
+                if( _parentLayer->sumX != 0.0 )
+			        lastOut = _actFunc( inSum ) / _parentLayer->sumX;
+                else
+			        lastOut = 0.0;
+            }
+            else
+			    lastOut = _actFunc( inSum );
 		}
 		else
 		{
@@ -362,11 +369,11 @@ struct Node
 
 		if( _bias )
 		{
-			log_verbose( "[%s](in=%f)--------- bias --------(out=%f)\n", _name, inSum, lastOut );
+			log_output( "[%s](in=%f)--------- bias --------(out=%f)\n", _name, inSum, lastOut );
 		}
 		else
 		{
-			log_verbose( "[%s](in=%f)-----------------------(out=%f)\n", _name, inSum, lastOut );
+			log_output( "[%s](in=%f)-----------------------(out=%f)\n", _name, inSum, lastOut );
 		}
 
 		inSum = (T)0.0;
@@ -404,12 +411,13 @@ struct Layer
 	int count;
 
 	T sumIn;
+	T sumX;
 
     T _lastError;
 
 	Layer( int n, ActType act, bool bias, char* name, int verbose = 0, int output = 0, int from = 0, int to = 0 )
 		: count(n), prevLayer(NULL), nextLayer(NULL), _activation(act), _bias(bias),
-		sumIn(0.0), _lastError(0.0), _verbose(verbose), _output(output), _from(from), _to(to)
+		sumIn(0.0), sumX(0.0), _lastError(0.0), _verbose(verbose), _output(output), _from(from), _to(to)
 	{
 
 		strcpy( _name, name );
@@ -429,10 +437,10 @@ struct Layer
 			_actFunc = actTanh<T>;
 			_derivActFunc = derivTanh<T>;
 		}
-		else if( act == softplus )
+		else if( act == softMax )
 		{
-			_actFunc = actSoftPlus<T>;
-			_derivActFunc = derivSoftPlus<T>;
+			_actFunc = actSoftMax<T>;
+			_derivActFunc = derivSoftMax<T>;
 		}
 		else if( act == relu )
 		{
@@ -455,8 +463,10 @@ struct Layer
 			char tmpname[MAX_NN_NAME];
 			sprintf(tmpname, "N%d-%s", (int)nodes.size(), _name );
             
-            if( ( _from == 0 && _to == 0) || ( _from <= i && _to >= i ) )
-			nodes.push_back( new Node<T>( _actFunc, false, tmpname ) );
+            if( ( _verbose || _output ) && ( _from == 0 && _to == 0) || ( _from <= i && _to >= i ) )
+			    nodes.push_back( new Node<T>( this, _actFunc, false, tmpname, _verbose, _output ) );
+            else
+			    nodes.push_back( new Node<T>( this, _actFunc, false, tmpname ) );
 		}
 
 		if( bias == true )
@@ -465,7 +475,7 @@ struct Layer
 			sprintf(tmpname, "B%d-%s", (int)nodes.size(), _name );
 			//nodes.push_back( new Node<T>( _actFunc, true, tmpname ) );
 
-			nodes.push_back( new Node<T>( actBias<T>, true, tmpname, _verbose, _output ) );
+			nodes.push_back( new Node<T>( this, actBias<T>, true, tmpname, _verbose, _output ) );
 			//_derivActFunc = actBias<T>;
 			//_derivActFunc = actBias<T>;
 		}
@@ -489,6 +499,22 @@ struct Layer
 	{
 		T netErr = (T)0.0, delta;
 								 // minus bias
+#if 0
+		int nc = nodes.size()-(_bias?1:0);
+		for( int i=0; i<nc; i++ )
+		{
+								 // TODO // handle proper target count!!!!
+			//delta = targets[i] - nodes[i]->lastOut;
+			delta = nodes[i]->deltaErr = nodes[i]->lastOut - targets[i];
+								 // TODO: Handle more targets
+			netErr +=  ( delta * delta );  // / 2.0;
+            //printf( "%f ", delta * delta );
+		}
+        log_verbose( "\nsum(netErr)=(%f)\n", netErr );
+
+		netErr /= (T)nc;
+		netErr = sqrt( netErr );
+#else
 		int nc = nodes.size()-(_bias?1:0);
 		for( int i=0; i<nc; i++ )
 		{
@@ -496,17 +522,17 @@ struct Layer
 			//delta = targets[i] - nodes[i]->lastOut;
 			delta = nodes[i]->lastOut - targets[i];
 								 // TODO: Handle more targets
-			netErr +=  ( delta * delta );
+			netErr +=  ( delta * delta );  // / 2.0;
             //printf( "%f ", delta * delta );
 		}
-        //printf( "%f ", netErr );
-        //printf( "\n" );
+        log_verbose( "\nsum(netErr)=(%f)\n", netErr );
 
 		netErr /= (T)nc;
 		netErr = sqrt( netErr );
-
+#endif
         _lastError = netErr;
 
+        log_output( "\ncalcError(%f)\n", netErr );
 		return netErr;
 	}
 
@@ -548,7 +574,8 @@ struct Layer
 			{
 				delta =  ( targets[i] - nodes[i]->lastOut );
 
-				nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
+			    nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
+
 				log_verbose("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n",
 					_name, nodes[i]->_name, delta, nodes[i]->lastOut, nodes[i]->grad );
 			}
@@ -583,7 +610,7 @@ struct Layer
 
 		if( prevLayer != NULL )
 			if( prevLayer->prevLayer != NULL )
-				// targets param not used in the recursive calls
+								 // target not used in the following calls
 				prevLayer->calcGradient(targets);
 	}
 
@@ -591,25 +618,32 @@ struct Layer
 	{
 		// Update weights
 		T alpha, delta, grad, out, weight;
+		T weightSum, weightFactor;
 		if( prevLayer != NULL /* || layer == _inLayer */ )
 		{
 			for( int i=nodes.size()-1; i>=0; i-- )
 			{
+
+				//for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
+                //    weightSum += nodes[i]->inConns[c]->weight;
+
 				for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
 				{
 					Connection<T>* conn = nodes[i]->inConns[c];
 					delta = conn->delta;
-					grad = SAFE(nodes[i]->grad);
+					grad = nodes[i]->grad;
 					//grad = conn->fromNode->grad;
 					//out = nodes[i]->lastOut;
 					out = conn->fromNode->lastOut;
 					weight = conn->weight;
 
+                    //weightFactor = weight / weightSum;
+
 					delta = learnRate * grad * out + momentum * delta;
 
 					conn->delta = delta;
 					conn->weight += delta;
-					log_verbose("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f \n",
+					log_output("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f \n",
 						_name, conn->_name, weight, conn->weight, delta, out, grad );
 				}
 			}
@@ -623,6 +657,15 @@ struct Layer
 		log_verbose("\n");
 
 		sumIn = 0.0;
+
+        if( _activation == softMax )
+        {
+            sumX = 0.0;
+		    for( int i=nodes.size()-1; i>=0; i-- )
+            {
+                sumX += nodes[i]->_actFunc( nodes[i]->inSum );
+            }
+        }
 
 		for( int i=nodes.size()-1; i>=0; i-- )
         {
@@ -815,9 +858,9 @@ struct NeuralNet
 			{
 				activation = "sigmoid";
 			}
-			else if( act == softplus )
+			else if( act == softMax )
 			{
-				activation = "softplus";
+				activation = "softMax";
 			}
 			else if( act == tangenth )
 			{
@@ -901,8 +944,8 @@ struct NeuralNet
 				pLayer = addLayer( count, relu, bias );
 			else if( activation == "relul" ) 
 				pLayer = addLayer( count, relul, bias );
-			else if( activation == "softplus" ) 
-				pLayer = addLayer( count, softplus, bias );
+			else if( activation == "softMax" ) 
+				pLayer = addLayer( count, softMax, bias );
 		}
 
 		try
@@ -1111,6 +1154,9 @@ int main( int argc, char**argv)
 				{
 					for( ; i < argc; i++ )
 					{
+                        int verbose = 0;
+                        int output = 0;
+
                         int b=0;
                         bool bias = false;
 
@@ -1119,33 +1165,78 @@ int main( int argc, char**argv)
                         if( b == 1 )
                             bias = true;
 
+                        int from = 0, to = 0;;
+
+                        int x = 0;
+                        int len=0;
+
+                        for( len=x=strlen(argv[i]); x > 0; x-- )
+                        {
+                            if( argv[i][x] == '@' )
+                            { 
+                                to = from = x+1;
+                                argv[i][x] = '\0';
+                                break;
+                            }
+                        }
+
+                        for( x=len; x > from; x-- )
+                        {
+                            if( argv[i][x] == '-' )
+                            { 
+                                to = x+1;
+                                argv[i][x] = '\0';
+                                break;
+                            }
+                        }
+
+                        if( to >= from )
+                        {
+                            to = atoi(&argv[i][to]);
+                            //printf(" to=%d ", to );
+                        }
+
+                        if( from > 0 )
+                        {
+                            from = atoi(&argv[i][from]);
+                            //printf(" from=%d ", from );
+                        }
+
+                        //printf("\n\n ****** %s ****** \n\n", &argv[i][b] );
+
+                        if( from > 0 || to > 0 )
+                        {
+                            verbose = _verbose;
+                            output = _output;
+                        }
+
 						switch( argv[i][b++] )
 						{
 							case 'L':
-								NN.addLayer( atoi( &argv[i][b] ), linear, bias );
+								NN.addLayer( atoi( &argv[i][b] ), linear, bias, verbose, output, from, to );
 								break;
 							case 'S':
-								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias );
+								NN.addLayer( atoi( &argv[i][b] ), sigmoid, bias, verbose, output, from, to );
 								break;
 							case 'T':
-								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias );
+								NN.addLayer( atoi( &argv[i][b] ), tangenth, bias, verbose, output, from, to );
 								break;
 							case 'R':
-								NN.addLayer( atoi( &argv[i][b] ), relu, bias );
+								NN.addLayer( atoi( &argv[i][b] ), relu, bias, verbose, output, from, to );
 								break;
 							case 'r':
-								NN.addLayer( atoi( &argv[i][b] ), relul, bias );
+								NN.addLayer( atoi( &argv[i][b] ), relul, bias, verbose, output, from, to );
 								break;
-							case 's':
-								NN.addLayer( atoi( &argv[i][b] ), softplus, bias );
+							case 'X':
+								NN.addLayer( atoi( &argv[i][b] ), softMax, bias, verbose, output, from, to );
 								break;
 							case 'N':
-								NN.addLayer( atoi( &argv[i][b] ), none, bias );
+								NN.addLayer( atoi( &argv[i][b] ), none, bias, verbose, output, from, to );
 								break;
 							case '-':
 								break;
 							default:
-								printf( "Layer types must be L, S, R, r, s or T prefixed to the Node count.\n" );
+								printf( "Layer types must be L, S, R, r, X or T prefixed to the Node count.\n" );
 								exit(1);
 						}
 					}
@@ -1234,7 +1325,7 @@ int main( int argc, char**argv)
 			        log_output( "\n" );
 
 
-	            	printf("\r%1.6f %d", lastError, x+1 );
+	            	printf("\r%1.12f %d", lastError, x+1 );
 	            	//fflush( stdout );
 
 
@@ -1251,9 +1342,22 @@ int main( int argc, char**argv)
    			printf("   %d epochs            ", e+1 );
             fflush( stdout );
 
-            if( store_every_time % (training_iterations+1) == 0 )
-                NN.store( strWeights.c_str() );
-        
+            if(  (e+1) % store_every_time == 0 )
+            {
+                if( store_every_time < 0 )
+                {
+                    char epch[255];
+                    sprintf( epch, "-%06d", e+1 );
+                    NN.store( (strWeights+epch).c_str() );
+                    printf("  -  Stored Weights in %s\n", (strWeights+epch).c_str() );
+                }
+                else
+                {
+                    NN.store( strWeights.c_str() );
+                    printf("  -  Stored Weights in %s\n", strWeights.c_str() );
+                }
+            }
+
             if( errorStopLearning > 0.0 )
                 if( lastError <= errorStopLearning )
                     break;
