@@ -520,7 +520,7 @@ struct Layer
 		{
 								 // TODO // handle proper target count!!!!
 			//delta = targets[i] - nodes[i]->lastOut;
-			delta = nodes[i]->lastOut - targets[i];
+			delta = nodes[i]->deltaErr = targets[i] - nodes[i]->lastOut;
 								 // TODO: Handle more targets
 			netErr +=  ( delta * delta );  // / 2.0;
             //printf( "%f ", delta * delta );
@@ -572,7 +572,8 @@ struct Layer
 			int nc = nodes.size();
 			for( int i=0; i<nc; i++ )
 			{
-				delta =  ( targets[i] - nodes[i]->lastOut );
+				//delta =  ( targets[i] - nodes[i]->lastOut );
+                delta = 2 * nodes[i]->deltaErr;
 
 			    nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
 
@@ -596,6 +597,8 @@ struct Layer
 					log_verbose("    g[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n",
 						_name, nodes[n]->_name, sum, nodes[n]->conns[c]->weight, grad );
 				}
+
+                nodes[n]->deltaErr = sum;
 
 				//T sum = sumDOW( nextLayer );
 				//T sum = sumDOW( this );
@@ -624,8 +627,8 @@ struct Layer
 			for( int i=nodes.size()-1; i>=0; i-- )
 			{
 
-				//for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
-                //    weightSum += nodes[i]->inConns[c]->weight;
+				for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
+                    weightSum += nodes[i]->inConns[c]->weight;
 
 				for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
 				{
@@ -637,14 +640,14 @@ struct Layer
 					out = conn->fromNode->lastOut;
 					weight = conn->weight;
 
-                    //weightFactor = weight / weightSum;
+                    //weightFactor = (weight == 0.0 || weightSum == 0.0 ) ? 0.0 : ( nodes[i]->deltaErr * (weightSum / weight) );
 
-					delta = learnRate * grad * out + momentum * delta;
+					delta = (learnRate * grad * out + momentum * delta); // - weightFactor;
 
 					conn->delta = delta;
 					conn->weight += delta;
-					log_output("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f \n",
-						_name, conn->_name, weight, conn->weight, delta, out, grad );
+					log_output("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f, wf=%f \n",
+						_name, conn->_name, weight, conn->weight, delta, out, grad, weightFactor );
 				}
 			}
 
