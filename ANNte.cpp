@@ -264,18 +264,25 @@ struct Connection
 
 		sprintf( _name, "C-%s-%s", fromNode->_name, toNode->_name );
 
-		T rnd = (T)std::rand() / (T)RAND_MAX;
+		T rnd = ((T)std::rand()+1) / (T)RAND_MAX;
 
-		weight = rnd + 0.000001;
+		weight = rnd + 0.01;
 	}
 
 	void xmit( T in )
 	{
 		if( toNode != nullptr )
 		{
-								 // Apply weight here
-			toNode->in( in * SAFE(weight) );
-			log_output( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*SAFE(weight) );
+            // Apply weight here
+            if( !toNode->_dropout )
+            {
+			    toNode->in( in * SAFE(weight) );
+			    log_output( "xm[%s]<in=%0.3f|w=%0.3f>(%0.3f)\n", _name, in, weight, in*SAFE(weight) );
+            }
+            else
+            {
+                log_output( "xm[%s]<dropout>\n", _name  );
+            }
 		}
 	}
 
@@ -298,6 +305,8 @@ struct Node
 
 	bool _activate;
 
+    bool _dropout;
+
     int _verbose, _output;
 
 	//ActType _activation;
@@ -309,7 +318,8 @@ struct Node
 	Node( Layer<T>* layer, ActFunc actFunc, bool bias, char* name, int verbose = 0, int output = 0 ) :
 	    _parentLayer(layer), inSum((T)0.0), lastOut((T)0.0),
 		deltaErr((T)0.0), grad((T)1.0),
-		_actFunc(actFunc), _bias(bias), _activate(false), _verbose(verbose), _output(output)
+		_actFunc(actFunc), _bias(bias), _activate(false), _dropout(false), 
+        _verbose(verbose), _output(output)
 	{
 		sprintf(_name, "%s", name );
 	}
@@ -340,8 +350,20 @@ struct Node
 		node->inConns.push_back( pConn );
 	}
 
-	T cycle( )
+	T cycle( bool dropout_candidate = false, T dropout_probability = 1.0 )
 	{
+        if( dropout_candidate == true )
+        {
+            if( dropout_probability == 0.0 )
+                dropout_probability = ( (T)rand() / ((T)RAND_MAX+1.0) ); 
+
+            _dropout = ( (T)rand() / ((T)RAND_MAX+1.0) ) > dropout_probability;
+
+            if( _dropout )
+                return 0;
+        }
+
+
 		if( _activate || _bias)
 		{
             if( _parentLayer->_activation == softMax )
@@ -522,7 +544,7 @@ struct Layer
 			//delta = targets[i] - nodes[i]->lastOut;
 			delta = nodes[i]->deltaErr = targets[i] - nodes[i]->lastOut;
 								 // TODO: Handle more targets
-			netErr +=  ( delta * delta );  // / 2.0;
+			netErr +=  ( delta * delta ) / 2.0;
             //printf( "%f ", delta * delta );
 		}
         log_verbose( "\nsum(netErr)=(%f)\n", netErr );
@@ -655,7 +677,7 @@ struct Layer
 		}
 	}
 
-	void cycle( )
+	void cycle( T dropout_probability = 1.0 )
 	{
 		log_verbose("\n");
 
@@ -670,10 +692,15 @@ struct Layer
             }
         }
 
+        bool dropout_candidate_select = false;
+
+        if( nextLayer != NULL && dropout_probability < 1.0 )
+            dropout_candidate_select = ( (rand()%3) == 0 );
+
 		for( int i=nodes.size()-1; i>=0; i-- )
         {
             if( g_threadcount <= 0 )
-			    sumIn += nodes[i]->cycle( );
+			    sumIn += nodes[i]->cycle( dropout_candidate_select, dropout_probability );
             else
                 node_queue.push( std::make_pair( &sumIn, nodes[i] ) );
         }
@@ -681,7 +708,7 @@ struct Layer
         node_queue.wait_for_empty();
 
 		if( nextLayer != NULL )
-			nextLayer->cycle( );
+			nextLayer->cycle( dropout_probability );
 
 		log_verbose("\n");
 	}
@@ -797,11 +824,11 @@ struct NeuralNet
 		return _outLayer->nodes[outNode]->lastOut;
 	}
 
-	void cycle()
+	void cycle( T dropout_probability = 1.0 )
 	{
 
 		// Start activation recursion
-		_inLayer->cycle();
+		_inLayer->cycle(dropout_probability);
 
 	}
 
@@ -1047,6 +1074,7 @@ int main( int argc, char**argv)
     int  store_every_time = 0;
     bool one_or_zero = false;
     dataType errorStopLearning = 0.0;
+    dataType noDropProbability = 1.0;
 	NeuralNet<dataType> NN;
 
 	while( i < argc && argv[i][0] == '-' )
@@ -1061,6 +1089,11 @@ int main( int argc, char**argv)
 			case 'S':
 				++i;
 				errorStopLearning = atof(argv[i]);
+				++i;
+				break;
+			case 'D':
+				++i;
+				noDropProbability = atof(argv[i]);
 				++i;
 				break;
 			case 'W':
@@ -1291,7 +1324,7 @@ int main( int argc, char**argv)
 
 		    char *line = NULL;
 		    size_t len = 0;
-            dataType lastError;
+            dataType lastError, runningError = 0.0;
 
 		    while( (read = getline(&line, &len, t_fp)) != -1 )
 		    {
@@ -1310,7 +1343,7 @@ int main( int argc, char**argv)
 				        NN.setInput( t, val );
 				        log_output( "I%d=%lf ", t, val );
 			        }
-			        NN.cycle();
+			        NN.cycle(noDropProbability);
 
 			        // Set targets for back propagation (training)
 			        for( int t=0; (t < oc) && (pch != NULL); t++ )
@@ -1321,14 +1354,14 @@ int main( int argc, char**argv)
 				        log_output( "O%d=%f ", t, val );
 			        }
 
-			        lastError = NN.backPropagate( );
+			        runningError += lastError = NN.backPropagate( );
 
 			        log_output( "[%f]<%f>", NN.getOutput(0), val - NN.getOutput(0) );
 
 			        log_output( "\n" );
 
 
-	            	printf("\r%1.12f %d", lastError, x+1 );
+	            	printf("\r%1.12f  %1.12f %d", runningError / (counter+1), lastError, x+1 );
 	            	//fflush( stdout );
 
 
