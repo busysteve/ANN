@@ -677,7 +677,7 @@ struct Layer
 		}
 	}
 
-	void cycle( int dropout_probability_select_mod = 5, T dropout_probability = 1.0 )
+	void cycle( int dropout_probability_select_mod = 0, T dropout_probability = 1.0 )
 	{
 		log_verbose("\n");
 
@@ -694,7 +694,7 @@ struct Layer
 
         bool dropout_candidate_select = false;
 
-        if( nextLayer != NULL && dropout_probability < 1.0 )
+        if( nextLayer != NULL && dropout_probability < 1.0 && dropout_probability_select_mod != 0 )
             dropout_candidate_select = ( (rand()%dropout_probability_select_mod) == 0 );
 
 		for( int i=nodes.size()-1; i>=0; i-- )
@@ -824,7 +824,7 @@ struct NeuralNet
 		return _outLayer->nodes[outNode]->lastOut;
 	}
 
-	void cycle( int dropout_probability_select_mod = 5, T dropout_probability = 1.0 )
+	void cycle( int dropout_probability_select_mod = 0, T dropout_probability = 1.0 )
 	{
 
 		// Start activation recursion
@@ -1075,7 +1075,7 @@ int main( int argc, char**argv)
     bool one_or_zero = false;
     dataType errorStopLearning = 0.0;
     dataType noDropProbability = 1.0;
-    int noDropSelectMod = 5;
+    int noDropSelectMod = 0;
 	NeuralNet<dataType> NN;
 
 	while( i < argc && argv[i][0] == '-' )
