@@ -677,7 +677,7 @@ struct Layer
 		}
 	}
 
-	void cycle( T dropout_probability = 1.0 )
+	void cycle( int dropout_probability_select_mod = 5, T dropout_probability = 1.0 )
 	{
 		log_verbose("\n");
 
@@ -695,7 +695,7 @@ struct Layer
         bool dropout_candidate_select = false;
 
         if( nextLayer != NULL && dropout_probability < 1.0 )
-            dropout_candidate_select = ( (rand()%3) == 0 );
+            dropout_candidate_select = ( (rand()%dropout_probability_select_mod) == 0 );
 
 		for( int i=nodes.size()-1; i>=0; i-- )
         {
@@ -708,7 +708,7 @@ struct Layer
         node_queue.wait_for_empty();
 
 		if( nextLayer != NULL )
-			nextLayer->cycle( dropout_probability );
+			nextLayer->cycle( dropout_probability_select_mod, dropout_probability );
 
 		log_verbose("\n");
 	}
@@ -824,11 +824,11 @@ struct NeuralNet
 		return _outLayer->nodes[outNode]->lastOut;
 	}
 
-	void cycle( T dropout_probability = 1.0 )
+	void cycle( int dropout_probability_select_mod = 5, T dropout_probability = 1.0 )
 	{
 
 		// Start activation recursion
-		_inLayer->cycle(dropout_probability);
+		_inLayer->cycle(dropout_probability_select_mod, dropout_probability);
 
 	}
 
@@ -1075,6 +1075,7 @@ int main( int argc, char**argv)
     bool one_or_zero = false;
     dataType errorStopLearning = 0.0;
     dataType noDropProbability = 1.0;
+    int noDropSelectMod = 5;
 	NeuralNet<dataType> NN;
 
 	while( i < argc && argv[i][0] == '-' )
@@ -1094,6 +1095,11 @@ int main( int argc, char**argv)
 			case 'D':
 				++i;
 				noDropProbability = atof(argv[i]);
+				++i;
+				break;
+			case 'M':
+				++i;
+				noDropSelectMod = atoi(argv[i]);
 				++i;
 				break;
 			case 'W':
@@ -1343,7 +1349,7 @@ int main( int argc, char**argv)
 				        NN.setInput( t, val );
 				        log_output( "I%d=%lf ", t, val );
 			        }
-			        NN.cycle(noDropProbability);
+			        NN.cycle(noDropSelectMod, noDropProbability);
 
 			        // Set targets for back propagation (training)
 			        for( int t=0; (t < oc) && (pch != NULL); t++ )
