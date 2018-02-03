@@ -223,7 +223,7 @@ T derivTanh( T n )
 template<typename T>
 T derivReLU( T n )
 {
-	return (n > 0.0) ? 1.0 : 0.0;
+	return (n < 0.0) ? 0.0 : 1.0;
 }
 
 template<typename T>
@@ -964,11 +964,11 @@ struct NeuralNet
 			if( bias )  count--;
 
 			// Add Layer - with nodes
-			if( activation[0] == 'l' )
+			if( activation == "linear" )
 				pLayer = addLayer( count, linear, bias );
-			else if( activation[0] == 's' )
+			else if( activation == "sigmoid" )
 				pLayer = addLayer( count, sigmoid, bias );
-			else if( activation[0] == 't' )
+			else if( activation == "tangenth" )
 				pLayer = addLayer( count, tangenth, bias );
 			else if( activation == "relu" ) 
 				pLayer = addLayer( count, relu, bias );
@@ -1077,6 +1077,7 @@ int main( int argc, char**argv)
     dataType noDropProbability = 1.0;
     int noDropSelectMod = 0;
 	NeuralNet<dataType> NN;
+    int trainingTestOutputMod = 0;
 
 	while( i < argc && argv[i][0] == '-' )
 	{
@@ -1100,6 +1101,11 @@ int main( int argc, char**argv)
 			case 'M':
 				++i;
 				noDropSelectMod = atoi(argv[i]);
+				++i;
+				break;
+			case 'O':
+				++i;
+				trainingTestOutputMod = atoi(argv[i]);
 				++i;
 				break;
 			case 'W':
@@ -1350,6 +1356,27 @@ int main( int argc, char**argv)
 				        log_output( "I%d=%lf ", t, val );
 			        }
 			        NN.cycle(noDropSelectMod, noDropProbability);
+
+                    if( trainingTestOutputMod > 0 )
+                    {
+                        if( (counter % trainingTestOutputMod) == 0 )
+                        {
+                            printf("\n");
+			                // Set targets for back propagation (training)
+			                for( int t=0; (t < oc); t++ )
+			                {
+				                log_output( "o%d=", t );
+                                if( one_or_zero == false )
+				                    printf( "%f ", NN.getOutput(t) );
+                                else
+                                    printf( "%d ", NN.getOutput(t) >= 0.5 ? 1 : 0 );
+
+			                }
+
+                            printf("\n");
+			                fflush( stdout );
+                        }
+                    }
 
 			        // Set targets for back propagation (training)
 			        for( int t=0; (t < oc) && (pch != NULL); t++ )
