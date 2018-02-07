@@ -1,4 +1,30 @@
 
+
+//**********************===========================================
+//**********************===========================================
+//**********************
+//**********************===========================================
+//**********************===========================================
+//**********************
+//**********************===========================================
+//**********************===========================================
+//**********************
+//**********************===========================================
+//**********************===========================================
+//
+//=================================================================
+//=================================================================
+//
+//=================================================================
+//=================================================================
+//
+//=================================================================
+//=================================================================
+//
+//
+//
+//
+//
 // g++ -g -o ann ANN.cpp XMLTag/xmltag.cpp
 // ./ann -w test.weights.xml -r 0.00002 -m 0.0002 -t train.txt -e 10 -i input.txt -l S2 S3 S2 S1
 // or
@@ -22,11 +48,14 @@
 //#define SAFE( x )    safeguard( x )
 #define SAFE( x )    (x)
 
+#include <thrust/copy.h>
 #include <thrust/reduce.h>
 #include <thrust/transform_reduce.h>
 #include <thrust/transform.h>
+#include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <thrust/for_each.h>
+#include <thrust/execution_policy.h>
 
 #include <algorithm>
 #include <iostream>
@@ -53,130 +82,73 @@ int g_threadcount = 0;
 
 //const void* nullptr = NULL;
 
+//#define  PRINT_VEC( X )  { printf( "\n[%d] -> ", __LINE__ ); for( T n : X )  printf( "%0.3f : ", n );  printf( "\n" ); }
+#define  PRINT_VEC( X )  { std::cout << "\n[" << __LINE__ << "] -> "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; }
 
 
 enum ActType{ linear = 0, sigmoid, tangenth, relu, relul, softMax, none, bias };
 
-template<typename T>
-T actNone( T n )
-{
-	return n;
-}
 
 
 template<typename T>
-T actBias( T n )
+struct Node
 {
-	return (T)1.0;
-}
+    std::vector<T> _outWeights;
+    T _value;
+    T _bias;
 
+    Node( T bias )
+    {
+        _bias = bias;
+    }
+
+    void addWeight()
+    {
+        _outWeights.push_back((T)std::rand()/(T)RAND_MAX);
+    }
+
+    void addWeight(T w)
+    {
+        _outWeights.push_back( w );
+    }
+
+    void addWeights( int n )
+    {
+        _outWeights.clear();
+        for( int i=0; i < n; i++ )
+            _outWeights.push_back((T)std::rand()/(T)RAND_MAX);
+    }
+
+    void addWeights( std::vector<T> &vw )
+    {
+        _outWeights.clear();
+        for( auto w : vw )
+            _outWeights.push_back( w );
+    }
+
+};
 
 template<typename T>
-T actLinear( T n )
+struct Layer
 {
-	return n;
-}
+    std::vector<T>  _nodes;
+    ActType         _actType;
 
+    Layer( ActType actT, int nodeCount, bool bias )
+    {
+        _actType = actT;
+        for( int r=0; r < nodeCount; r++ )
+        {
+            _nodes.push_back( Node<T>(0.0) );
+        }
+        
+        if( bias )
+        {
+            _nodes.push_back( Node<T>(1.0) );
+        }
+    }
+};
 
-template<typename T>
-T actSigmoid( T n )
-{
-	return 1.0 / ( 1.0 + exp(-n) );
-}
-
-template<typename T>
-T actSoftMax( T n )
-{
-	return exp(n);
-}
-
-
-template<typename T>
-T actTanh( T n )
-{
-	return tanh( n );
-}
-
-template<typename T>
-T actReLU( T n )
-{
-	return (n > 0.0) ? n : 0.0;
-}
-
-template<typename T>
-T actReLUL( T n )
-{
-	return (n > 0.0) ? n : (n*.001);
-}
-
-
-template<typename T>
-T derivLinear( T n )
-{
-	return 1.0;
-}
-
-
-template<typename T>
-T derivSigmoid( T n )
-{
-	return n * ( (T)1.0 - n );
-}
-
-template<typename T>
-T derivSoftMax( T n )
-{
-	return n * ( (T)1.0 - n );
-}
-
-
-template<typename T>
-T derivTanh( T n )
-{
-	return 1.0 - n * n;
-}
-
-template<typename T>
-T derivReLU( T n )
-{
-	return (n < 0.0) ? 0.0 : 1.0;
-}
-
-template<typename T>
-T derivReLUL( T n )
-{
-	return 1.0;
-	//return (n > 0.0) ? 1.0 : 0.0;
-}
-
-
-
-
-//**********************===========================================
-//**********************===========================================
-//**********************
-//**********************===========================================
-//**********************===========================================
-//**********************
-//**********************===========================================
-//**********************===========================================
-//**********************
-//**********************===========================================
-//**********************===========================================
-//
-//=================================================================
-//=================================================================
-//
-//=================================================================
-//=================================================================
-//
-//=================================================================
-//=================================================================
-//
-//
-//
-//
-//
 
 template<typename T>
 struct NeuralNet
@@ -199,12 +171,12 @@ struct NeuralNet
 	bool _bias;
     int  _verbose, _output, _from, _to;
 
-	std::vector< std::vector<T> >               vecLayers;
-	std::vector< ActType >                      vecActivationType;
-	std::vector< actFunc >                      vecActivationFunc;
-	std::vector< derivActFunc >                 vecDerivative;
-	std::vector< T >                            vecLayerBias;
-    std::vector< std::vector< std::vector<T> > > vecWeights;
+	std::vector< thrust::host_vector<T> >       vecLayers;
+	std::vector< thrust::host_vector<T> >       vecWeights;
+	std::vector< thrust::host_vector<int> >     vecForwardWeightKeys;
+	std::vector< thrust::host_vector<int> >     vecBackwardWeightKeys;
+	std::vector< thrust::host_vector<T> >       vecForwardSums;
+	std::vector< thrust::host_vector<T> >       vecBackwardSums;
 
 	std::vector<T> vecBackPrepTargets;
 
@@ -218,45 +190,79 @@ struct NeuralNet
         clear();
     }
 
+    //===================================================
+
+    //template<typename T>
+    static __host__ __device__ T actSigmoid( T n )
+    {
+	    return 1.0 / ( 1.0 + exp(-n) );
+    }
+
+    //template<typename T>
+    static __host__ __device__ T derivSigmoid( T n )
+    {
+	    return n * ( (T)1.0 - n );
+    }
+
+
+    //template<typename T>
+    T actLinear( T n )
+    {
+	    return n;
+    }
+
+    //template<typename T>
+    T derivLinear( T n )
+    {
+	    return 1.0;
+    }
+
+
+
+    //template<typename T>
+    T actSoftMax( T n )
+    {
+	    return exp(n);
+    }
+
+    //template<typename T>
+    T derivSoftMax( T n )
+    {
+	    return n * ( (T)1.0 - n );
+    }
+
+    //template<typename T>
+    T actTanh( T n )
+    {
+	    return tanh( n );
+    }
+
+    //template<typename T>
+    T derivTanh( T n )
+    {
+	    return 1.0 - n * n;
+    }
+
+
+    //template<typename T>
+    T actReLUL( T n )
+    {
+	    return (n > 0.0) ? n : (n*.001);
+    }
+
+    //template<typename T>
+    T derivReLUL( T n )
+    {
+	    return 1.0;
+	    //return (n > 0.0) ? 1.0 : 0.0;
+    }
+
+
+    //===================================================
 
 	T calcError( std::vector<T> &targets )
 	{
 		T netErr = (T)0.0, delta;
-								 // minus bias
-#if 0
-        thrust::device_vector<T> dev_targets ( targets.begin(), targets.end() );
-        thrust::device_vector<T> dev_lastouts;
-    
-        
-        dev_lastouts.push_back();
-
-        netErr = thrust::reduce( 
-
-		netErr /= (T)nc;
-		netErr = sqrt( netErr );
-
-
-#else
-/*
-		int nc = nodes.size()-(_bias?1:0);
-		for( int i=0; i<nc; i++ )
-		{
-								 // TODO // handle proper target count!!!!
-			//delta = targets[i] - nodes[i]->lastOut;
-			delta = nodes[i]->deltaErr = targets[i] - nodes[i]->lastOut;
-								 // TODO: Handle more targets
-			netErr +=  ( delta * delta ) / 2.0;
-            //printf( "%f ", delta * delta );
-		}
-        log_verbose( "\nsum(netErr)=(%f)\n", netErr );
-
-		netErr /= (T)nc;
-		netErr = sqrt( netErr );
-*/
-#endif
-        _lastError = netErr;
-
-        log_output( "\ncalcError(%f)\n", netErr );
 
 		return netErr;
 	}
@@ -269,128 +275,109 @@ struct NeuralNet
 
 	void calcGradient( std::vector<T> &targets )
 	{
-/*
-		if( nextLayer == NULL )	 // output layer
-		{
-			T delta;
-			//int nc = nodes.size()-(_bias?1:0); // minus bias
-								 // minus bias
-			int nc = nodes.size();
-			for( int i=0; i<nc; i++ )
-			{
-				//delta =  ( targets[i] - nodes[i]->lastOut );
-                delta = 2 * nodes[i]->deltaErr;
 
-			    nodes[i]->grad = delta * _derivActFunc( nodes[i]->lastOut );
-
-				log_verbose("og[%s][%s]outer{delta=%f : last=%f : grad=%f}\n",
-					_name, nodes[i]->_name, delta, nodes[i]->lastOut, nodes[i]->grad );
-			}
-		}
-		else
-		{
-								 // minus bias
-			int nc = nodes.size()-(_bias?1:0);
-			//int nc = nodes.size(); // minus bias
-			for( int n=0; n<nc; n++ )
-			{
-
-				T sum = 0.0;
-				for( int c = nodes[n]->conns.size()-1; c >= 0; c-- )
-				{
-					T grad = nodes[n]->conns[c]->toNode->grad;
-					sum += ( nodes[n]->conns[c]->weight ) * grad;
-					log_verbose("    g[%s][%s]inner{sum=%f:weight=%f:grad=%f}\n",
-						_name, nodes[n]->_name, sum, nodes[n]->conns[c]->weight, grad );
-				}
-
-                nodes[n]->deltaErr = sum;
-
-				nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
-
-				log_verbose("ig[%s][%s]inner{sum=%f:sumIn=%f:grad=%f:deriv=%f:out=%f}\n",
-					_name, nodes[n]->_name, sum, sumIn, nodes[n]->grad,
-					_derivActFunc( nodes[n]->lastOut ), nodes[n]->lastOut );
-			}
-		}
-
-		if( prevLayer != NULL )
-			if( prevLayer->prevLayer != NULL )
-								 // target not used in the following calls
-				prevLayer->calcGradient(targets);
-*/
 	}
 
 	void updateWeights( T learnRate, T momentum )
 	{
-/*
-		// Update weights
-		T alpha, delta, grad, out, weight;
-		T weightSum, weightFactor;
-		if( prevLayer != NULL )
-		{
-			for( int i=nodes.size()-1; i>=0; i-- )
-			{
 
-				for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
-                    weightSum += nodes[i]->inConns[c]->weight;
-
-				for( int c = nodes[i]->inConns.size()-1; c >= 0; c-- )
-				{
-					Connection<T>* conn = nodes[i]->inConns[c];
-					delta = conn->delta;
-					grad = nodes[i]->grad;
-					//grad = conn->fromNode->grad;
-					//out = nodes[i]->lastOut;
-					out = conn->fromNode->lastOut;
-					weight = conn->weight;
-
-                    //weightFactor = (weight == 0.0 || weightSum == 0.0 ) ? 0.0 : ( nodes[i]->deltaErr * (weightSum / weight) );
-
-					delta = (learnRate * grad * out + momentum * delta); // - weightFactor;
-
-					conn->delta = delta;
-					conn->weight += delta;
-					log_output("   w[%s][%s]w=%f:w=%f, d=%f, o=%f, g=%f, wf=%f \n",
-						_name, conn->_name, weight, conn->weight, delta, out, grad, weightFactor );
-				}
-			}
-
-			prevLayer->updateWeights( learnRate, momentum );
-		}
-*/
 	}
 
 	void cycle( int dropout_probability_select_mod = 0, T dropout_probability = 1.0 )
 	{
 		log_verbose("\n");
 
-/*
-        if( _activation == softMax )
+        int sz = vecLayers.size();
+
+        thrust::equal_to<int> eq;
+        thrust::plus<T> sum;
+        thrust::multiplies<T> mul;
+
+        for( int i=0; i < (sz-1); i++ )
         {
-            sumX = 0.0;
-		    for( int i=nodes.size()-1; i>=0; i-- )
+
+            thrust::host_vector<T> weighIn;
+
+            auto &L1 = vecLayers[i];
+            auto &L2 = vecLayers[i+1];
+
+            int L1_sz = L1.size();
+            int L2_sz = L2.size();
+
+            //auto layer = L1;
+
+    PRINT_VEC( L1 )
+
+            ActType act = sigmoid;
+
+
+            switch( act )
             {
-                sumX += nodes[i]->_actFunc( nodes[i]->inSum );
+		        case linear:
+                    break;
+		        case sigmoid:
+                    // Run activation function
+                    thrust::transform( L1.begin(), L1.end(), L1.begin(), actSigmoid );
+                    break;
+		        case tangenth:
+                    break;
+		        case softMax:
+                    break;
+		        case relu:
+		            break;
+		        case relul:
+                    break;	            
+                default:
+                    return;
             }
-        }
-*/
-        int layerActFuncIdx = 0;
-        for( auto &layer : vecLayers )
-        {
-            actFunc act = vecActivationFunc[layerActFuncIdx];
-            //std::transform( layer.begin(), layer.end(), layer.begin(), [=](T x) -> T{ return act(x); } );
-            std::transform( layer.begin(), layer.end(), layer.begin(), act );
-            layerActFuncIdx++;
-        }
-/*
-        bool dropout_candidate_select = false;
 
-        if( dropout_probability < 1.0 && dropout_probability_select_mod != 0 )
-            dropout_candidate_select = ( (rand()%dropout_probability_select_mod) == 0 );
-*/
+    PRINT_VEC( L1 )
 
-        
+            for( T n : L1 )
+                for( int d=0; d < L2_sz; d++ ) 
+                    weighIn.push_back( n );
+    
+    PRINT_VEC( weighIn )
+    
+            thrust::host_vector<T> weighOut( L2_sz ); 
+            thrust::host_vector<int> weighOutKeys( L2_sz ); 
+
+            // Create a holding vector for repeated layer activation results
+            thrust::host_vector<T> tmp_vec;
+
+            // Copy results into tmp_vec repeatedly
+            for( int r=0; r < L1_sz; r++ )
+                for( int nl=0; nl < L2_sz; nl++ )
+                    tmp_vec.push_back( L1[r] );
+
+    PRINT_VEC( tmp_vec ) 
+    PRINT_VEC( vecWeights[i] ) 
+
+            thrust::transform( tmp_vec.begin(), tmp_vec.end(), vecWeights[i].begin(), tmp_vec.begin(), mul );
+
+    PRINT_VEC( vecForwardWeightKeys[i] )
+    PRINT_VEC( tmp_vec ) 
+    PRINT_VEC( weighOutKeys )
+    PRINT_VEC( weighOut ) 
+
+            thrust::reduce_by_key( thrust::host, 
+                        vecForwardWeightKeys[i].begin(), 
+                        vecForwardWeightKeys[i].end(),
+                        tmp_vec.begin(),
+                        weighOutKeys.begin(),
+                        weighOut.begin(),
+                        eq, sum );
+                        
+    PRINT_VEC( weighOutKeys )
+    PRINT_VEC( weighOut )
+    PRINT_VEC( L2 ) 
+
+            thrust::copy( weighOut.begin(), weighOut.end(), L2.begin() );
+ 
+    PRINT_VEC( L2 )
+        }        
+
+    PRINT_VEC( vecLayers.back() )
 
 		log_verbose("\n");
 	}
@@ -415,43 +402,35 @@ struct NeuralNet
 		if( n < 1 )
 			return 0;
 
-		char name[MAX_NN_NAME];
 
+
+		char name[MAX_NN_NAME];
 		//sprintf( name, "L%d", (int)layers.size() );
 
-
-        switch( act )
+        // Add weights after input layer
+        if( !vecLayers.empty() )
         {
-		    case linear:
-			    _actFunc = actLinear<T>;
-			    _derivActFunc = derivLinear<T>;
-		        break;
-		    case sigmoid:
-			    _actFunc = actSigmoid<T>;
-			    _derivActFunc = derivSigmoid<T>;
-                break;
-		    case tangenth:
-			    _actFunc = actTanh<T>;
-			    _derivActFunc = derivTanh<T>;
-                break;
-		    case softMax:
-			    _actFunc = actSoftMax<T>;
-			    _derivActFunc = derivSoftMax<T>;
-                break;
-		    case relu:
-			    _actFunc = actReLU<T>;
-			    _derivActFunc = derivReLU<T>;
-		        break;
-		    case relul:
-		    {
-			    _actFunc = actReLUL<T>;
-			    _derivActFunc = derivReLUL<T>;
-		    }
-            default:
-                return(0);
+            vecWeights.push_back( thrust::host_vector<T>( n*vecLayers.back().size() ) );
+            auto &ws = vecWeights.back();
+            thrust::generate( ws.begin(), ws.end(), [](){ return (T)std::rand() / (T)RAND_MAX; } );
+
+            vecForwardWeightKeys.push_back( thrust::host_vector<T>(  ) );
+            vecBackwardWeightKeys.push_back( thrust::host_vector<T>(  ) );
+
+
+            auto &fwk = vecForwardWeightKeys.back();
+            for( int j=0; j<n; j++ )
+                for( int i=0; i<vecLayers.back().size(); i++ )
+                    fwk.push_back( j );
+                
+            auto &bwk = vecBackwardWeightKeys.back();
+            for( int i=0; i<vecLayers.back().size(); i++ )
+                for( int j=0; j<n; j++ )
+                    bwk.push_back( j );
+                
         }
 
-		vecLayers.push_back( std::vector<T>(n) );
+		vecLayers.push_back( thrust::host_vector<T>(n) );
 
         return n;
 	}
