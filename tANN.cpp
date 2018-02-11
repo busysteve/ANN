@@ -82,72 +82,13 @@ int g_threadcount = 0;
 
 //const void* nullptr = NULL;
 
-//#define  PRINT_VEC( X )  { printf( "\n[%d] -> ", __LINE__ ); for( T n : X )  printf( "%0.3f : ", n );  printf( "\n" ); }
-#define  PRINT_VEC( X )  { std::cout << "\n[" << __LINE__ << "] -> "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; }
+//#define  PRINT_VEC_FORWARD( X )  { printf( "\n[%d] -> ", __LINE__ ); for( T n : X )  printf( "%0.3f : ", n );  printf( "\n" ); }
+#define  PRINT_VEC_FORWARD( X )  { std::cout << "\n[" << __LINE__ << "] -> "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; }
+
+#define  PRINT_VEC_BACK( X )  { std::cout << "\n{" << __LINE__ << "} <- "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; }
 
 
 enum ActType{ linear = 0, sigmoid, tangenth, relu, relul, softMax, none, bias };
-
-
-
-template<typename T>
-struct Node
-{
-    std::vector<T> _outWeights;
-    T _value;
-    T _bias;
-
-    Node( T bias )
-    {
-        _bias = bias;
-    }
-
-    void addWeight()
-    {
-        _outWeights.push_back((T)std::rand()/(T)RAND_MAX);
-    }
-
-    void addWeight(T w)
-    {
-        _outWeights.push_back( w );
-    }
-
-    void addWeights( int n )
-    {
-        _outWeights.clear();
-        for( int i=0; i < n; i++ )
-            _outWeights.push_back((T)std::rand()/(T)RAND_MAX);
-    }
-
-    void addWeights( std::vector<T> &vw )
-    {
-        _outWeights.clear();
-        for( auto w : vw )
-            _outWeights.push_back( w );
-    }
-
-};
-
-template<typename T>
-struct Layer
-{
-    std::vector<T>  _nodes;
-    ActType         _actType;
-
-    Layer( ActType actT, int nodeCount, bool bias )
-    {
-        _actType = actT;
-        for( int r=0; r < nodeCount; r++ )
-        {
-            _nodes.push_back( Node<T>(0.0) );
-        }
-        
-        if( bias )
-        {
-            _nodes.push_back( Node<T>(1.0) );
-        }
-    }
-};
 
 
 template<typename T>
@@ -173,6 +114,8 @@ struct NeuralNet
 
 	std::vector< thrust::host_vector<T> >       vecLayers;
 	std::vector< thrust::host_vector<T> >       vecWeights;
+	std::vector< thrust::host_vector<T> >       vecDeltas;
+	std::vector< thrust::host_vector<T> >       vecGrads;
 	std::vector< thrust::host_vector<int> >     vecForwardWeightKeys;
 	std::vector< thrust::host_vector<int> >     vecBackwardWeightKeys;
 	std::vector< thrust::host_vector<T> >       vecForwardSums;
@@ -204,6 +147,16 @@ struct NeuralNet
 	    return n * ( (T)1.0 - n );
     }
 
+    static __host__ __device__ T diffDerivSigmoid(  T d, T o  )
+    { 
+        return 2.0*d*derivSigmoid(o); 
+    }
+
+    static __host__ __device__ T diffSquared2( T t, T o )
+    {
+        T r = t - o;
+	    return (r*r)/2.0;
+    }
 
     //template<typename T>
     T actLinear( T n )
@@ -272,12 +225,6 @@ struct NeuralNet
         return _lastError;
     }
 
-
-	void calcGradient( std::vector<T> &targets )
-	{
-
-	}
-
 	void updateWeights( T learnRate, T momentum )
 	{
 
@@ -306,7 +253,7 @@ struct NeuralNet
 
             //auto layer = L1;
 
-    PRINT_VEC( L1 )
+    PRINT_VEC_FORWARD( L1 )
 
             ActType act = sigmoid;
 
@@ -331,13 +278,13 @@ struct NeuralNet
                     return;
             }
 
-    PRINT_VEC( L1 )
+    PRINT_VEC_FORWARD( L1 )
 
             for( T n : L1 )
                 for( int d=0; d < L2_sz; d++ ) 
                     weighIn.push_back( n );
     
-    PRINT_VEC( weighIn )
+    PRINT_VEC_FORWARD( weighIn )
     
             thrust::host_vector<T> weighOut( L2_sz ); 
             thrust::host_vector<int> weighOutKeys( L2_sz ); 
@@ -350,15 +297,15 @@ struct NeuralNet
                 for( int nl=0; nl < L2_sz; nl++ )
                     tmp_vec.push_back( L1[r] );
 
-    PRINT_VEC( tmp_vec ) 
-    PRINT_VEC( vecWeights[i] ) 
+    PRINT_VEC_FORWARD( tmp_vec ) 
+    PRINT_VEC_FORWARD( vecWeights[i] ) 
 
             thrust::transform( tmp_vec.begin(), tmp_vec.end(), vecWeights[i].begin(), tmp_vec.begin(), mul );
 
-    PRINT_VEC( vecForwardWeightKeys[i] )
-    PRINT_VEC( tmp_vec ) 
-    PRINT_VEC( weighOutKeys )
-    PRINT_VEC( weighOut ) 
+    PRINT_VEC_FORWARD( vecForwardWeightKeys[i] )
+    PRINT_VEC_FORWARD( tmp_vec ) 
+    PRINT_VEC_FORWARD( weighOutKeys )
+    PRINT_VEC_FORWARD( weighOut ) 
 
             thrust::reduce_by_key( thrust::host, 
                         vecForwardWeightKeys[i].begin(), 
@@ -368,16 +315,16 @@ struct NeuralNet
                         weighOut.begin(),
                         eq, sum );
                         
-    PRINT_VEC( weighOutKeys )
-    PRINT_VEC( weighOut )
-    PRINT_VEC( L2 ) 
+    PRINT_VEC_FORWARD( weighOutKeys )
+    PRINT_VEC_FORWARD( weighOut )
+    PRINT_VEC_FORWARD( L2 ) 
 
             thrust::copy( weighOut.begin(), weighOut.end(), L2.begin() );
  
-    PRINT_VEC( L2 )
+    PRINT_VEC_FORWARD( L2 )
         }        
 
-    PRINT_VEC( vecLayers.back() )
+    PRINT_VEC_FORWARD( vecLayers.back() )
 
 		log_verbose("\n");
 	}
@@ -402,11 +349,6 @@ struct NeuralNet
 		if( n < 1 )
 			return 0;
 
-
-
-		char name[MAX_NN_NAME];
-		//sprintf( name, "L%d", (int)layers.size() );
-
         // Add weights after input layer
         if( !vecLayers.empty() )
         {
@@ -415,14 +357,14 @@ struct NeuralNet
             thrust::generate( ws.begin(), ws.end(), [](){ return (T)std::rand() / (T)RAND_MAX; } );
 
             vecForwardWeightKeys.push_back( thrust::host_vector<T>(  ) );
-            vecBackwardWeightKeys.push_back( thrust::host_vector<T>(  ) );
-
 
             auto &fwk = vecForwardWeightKeys.back();
             for( int j=0; j<n; j++ )
                 for( int i=0; i<vecLayers.back().size(); i++ )
                     fwk.push_back( j );
                 
+            vecBackwardWeightKeys.push_back( thrust::host_vector<T>(  ) );
+
             auto &bwk = vecBackwardWeightKeys.back();
             for( int i=0; i<vecLayers.back().size(); i++ )
                 for( int j=0; j<n; j++ )
@@ -432,8 +374,175 @@ struct NeuralNet
 
 		vecLayers.push_back( thrust::host_vector<T>(n) );
 
+        vecGrads.push_back( thrust::host_vector<T>( n ) );
+        thrust::fill( vecGrads.back().begin(), vecGrads.back().end(), 0 );
+
+        vecDeltas.push_back( thrust::host_vector<T>( n ) );
+        thrust::fill( vecDeltas.back().begin(), vecDeltas.back().end(), 0 );
+
         return n;
 	}
+
+
+	void calcGradient( std::vector<T> &targets )
+	{   
+        _lastError = (T)0.0;
+
+        auto &L = vecLayers.back();
+
+        thrust::host_vector<T> diffs( L.size() );
+     
+        thrust::transform( L.begin(), L.end(), targets.begin(), diffs.begin(), [](T a, T b){ return a-b; } ); // Diffs
+        _lastError = thrust::reduce( diffs.begin(), diffs.end(), 0, [](T a, T b){ return a+((b*b)/2.0); } );
+        _lastError /= (T)L.size();
+        _lastError = sqrt( _lastError );
+        
+        //_lastError = thrust::inner_product( L.begin(), L.end(), targets.begin(), 0, thrust::plus<T>(), diffSquared2<T> );
+
+/*
+        thrust::host_vector< thrust::host_vector< thrust::host_vector<T> > > wt;
+        
+        int w=0;
+        for( auto &keys : vecForwardWeightKeys )
+        {
+            PRINT_VEC_BACK( keys );            
+            PRINT_VEC_BACK( vecWeights[w] );            
+
+            //int i=0;   
+            for( T k : keys )
+            {
+                wt.push_back( thrust::host_vector< thrust::host_vector<T> >(0) );
+                int lsz1 = vecLayers[w].size();
+                int lsz2 = vecLayers[w+1].size();
+                //for( int i=0; i < lsz1; i++ )
+                {
+                    int x = 0;
+                    int wz = lsz1;
+                    int wy = 0;
+                    for( auto it = vecWeights[w].begin(); x < vecWeights[w].size(); x+=lsz2, wy=wz, wz+=lsz1  )
+                        wt.back().push_back( thrust::host_vector<T>(it+wy, it+wz) ); 
+
+                    PRINT_VEC_BACK( wt.back().back() )
+
+                }
+                //i++;
+            }
+
+            PRINT_VEC_BACK( keys );            
+
+            w++;
+        }
+
+        for( auto &x : wt ) 
+            for( auto &y : x )
+                //for( auto &z : y )
+                    PRINT_VEC_BACK( y )
+*/
+
+        int sz = vecLayers.size();
+        for( int i=sz; i > 1; i-- )
+        {
+            auto &W = vecWeights[i-1];
+            auto &L = vecLayers[i-1];
+            auto &L2 = vecLayers[i-2];
+            auto &G = vecGrads[i-1];
+            thrust::host_vector<T> sumOut( L2.size() ); 
+            thrust::host_vector<int> sumOutKeys( L2.size() ); 
+
+            if( i == sz ) // output layer
+            {
+                std::cout << i << " : " << vecGrads.size() << std::endl;
+                PRINT_VEC_BACK( L )
+                PRINT_VEC_BACK( diffs )
+                PRINT_VEC_BACK( G )
+                //thrust::transform( L.begin(), L.end(), diffs.begin(), vecGrads[i-1].begin(), [](T o,T d) -> T { return 2.0*d*derivSigmoid(o); } );
+                thrust::transform( L.begin(), L.end(), diffs.begin(), G.begin(), diffDerivSigmoid );
+            }
+            else
+            {
+                auto &Gp = vecGrads[i];
+                PRINT_VEC_BACK( W )
+                PRINT_VEC_BACK( L )
+                PRINT_VEC_BACK( L2 )
+                PRINT_VEC_BACK( G )
+
+                thrust::host_vector<T> tmp_vec;
+                thrust::host_vector<T> tmp_vec_sum( L.size() );
+                thrust::host_vector<T> tmp_vec_grad_sum( G.size() );
+
+                //for( int r=0; r < L.size(); r++ )
+                //    for( int nl=0; nl < L2_sz; nl++ )
+                //        tmp_vec.push_back( L1[r] );
+
+                //thrust::transform( G.begin(), G.end(), W.begin(), G.begin(), [](T w,T g){ return (w*g); } );
+
+                for( int g=0; g < Gp.size(); g++ )
+                {
+                    for( int l=0; l < L.size(); l++ )
+                    //for( int l2=0; l2 < L2.size(); l2++ )
+                    {
+                        tmp_vec.push_back( Gp[g] );
+                    }
+                }
+
+                PRINT_VEC_BACK( tmp_vec )
+
+                thrust::reduce_by_key( thrust::host, 
+                        //vecBackwardWeightKeys[i-1].begin(), 
+                        //vecBackwardWeightKeys[i-1].end(),
+                        vecForwardWeightKeys[i-1].begin(), 
+                        vecForwardWeightKeys[i-1].end(),
+                        tmp_vec.begin(),
+                        sumOutKeys.begin(),
+                        sumOut.begin(),
+                        thrust::equal_to<T>(), thrust::plus<T>() );
+
+                PRINT_VEC_BACK( vecForwardWeightKeys[i-1] )
+                PRINT_VEC_BACK( vecBackwardWeightKeys[i-1] )
+                PRINT_VEC_BACK( Gp )
+                PRINT_VEC_BACK( sumOutKeys )
+                PRINT_VEC_BACK( sumOut )
+
+                
+                        //for( int r=0; r < weighOut.size(); r++ )
+                        //    for( int nl=0; nl < L.size(); nl++ )
+                        //        tmp_vec_grad_sum.push_back( weighOut[r] );
+
+                PRINT_VEC_BACK( L2 )
+                PRINT_VEC_BACK( sumOut )
+
+                thrust::transform( sumOut.begin(), sumOut.end(), L2.begin(), sumOut.begin(), [](T s,T o) -> T { return (s*derivSigmoid(o)); } );
+
+                PRINT_VEC_BACK( L2 )
+                PRINT_VEC_BACK( sumOut )
+
+                //for( int r=0; r < sumOut.size(); r++ )
+                //    for( int nl=0; nl < L.size(); nl++ )
+                //        G.push_back( sumOut[r] );
+                //PRINT_VEC_BACK( G )
+            }
+        }
+
+/*
+		else
+		{
+			int nc = nodes.size()-(_bias?1:0);
+			for( int n=0; n<nc; n++ )
+			{
+				T sum = 0.0;
+				for( int c = nodes[n]->conns.size()-1; c >= 0; c-- )
+				{
+					T grad = nodes[n]->conns[c]->toNode->grad;
+					sum += ( nodes[n]->conns[c]->weight ) * grad;
+				}
+                nodes[n]->deltaErr = sum;
+				nodes[n]->grad = sum * _derivActFunc( nodes[n]->lastOut );
+			}
+		}
+*/
+	}
+
+
 
 	std::vector<T>& getLayer( int n )
 	{
@@ -475,7 +584,6 @@ struct NeuralNet
 		return 0;
 	}
 
-
 	void backPushTargets( T t )
 	{
 		vecBackPrepTargets.push_back( t );
@@ -484,9 +592,6 @@ struct NeuralNet
 	T backPropagate()
 	{
         _dirty = true;
-
-		// * Calc error for layers
-		T layer_error = calcError( vecBackPrepTargets );
 
 		// * Calc gradients recursively
 		calcGradient( vecBackPrepTargets );
@@ -498,7 +603,7 @@ struct NeuralNet
 
 		vecBackPrepTargets.clear();
 
-        return layer_error;
+        return _lastError;
 	}
 
 	void store( std::string fileName )
