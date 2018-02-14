@@ -58,14 +58,17 @@
 #include <thrust/execution_policy.h>
 
 #include <algorithm>
-#include <iostream>
 #include <vector>
 #include <string>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
-#include "XMLTag/xmltag.h"
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <iterator>
+
 
 //#define log_verbose
 //#define log_verbose   printf
@@ -82,14 +85,15 @@ int g_threadcount = 0;
 
 //const void* nullptr = NULL;
 
-//#define  PRINT_VEC_FORWARD( X )  { std::cout << "\n[" << __LINE__ << "](" << #X << ") -> "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; }
-#define  PRINT_VEC_FORWARD( X )
+#define  PRINT_VEC_FORWARD( X )  if( ::_verbose != 0 ) { std::cout << "\n[" << __LINE__ << "](" << #X << ") -> "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; } 
+//#define  PRINT_VEC_FORWARD( X )
 
-//#define  PRINT_VEC_BACK( X )     { std::cout << "\n{" << __LINE__ << "}(" << #X << ") <- "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; }
-#define  PRINT_VEC_BACK( X )
+#define  PRINT_VEC_BACK( X )     if( ::_verbose != 0 ) { std::cout << "\n{" << __LINE__ << "}(" << #X << ") <- "; for( T n : X )  std::cout << n << " : "; std::cout << "\n"; } 
+//#define  PRINT_VEC_BACK( X )
+
+
 
 enum ActType{ linear = 0, sigmoid, tangenth, relu, relul, softMax, none, bias };
-
 
 template<typename T>
 struct NeuralNet
@@ -161,6 +165,11 @@ struct NeuralNet
     {
         T r = t - o;
 	    return (r*r)/2.0;
+    }
+
+    static __host__ __device__ T addSquareOver2( T a, T b )
+    {
+	    return a+((b*b)/2.0);
     }
 
     //template<typename T>
@@ -393,10 +402,26 @@ struct NeuralNet
 
         thrust::host_vector<T> diffs( L.size() );
      
-        thrust::transform( L.begin(), L.end(), targets.begin(), diffs.begin(), [](T a, T b){ return a-b; } ); // Diffs
-        _lastError = thrust::reduce( diffs.begin(), diffs.end(), 0, [](T a, T b){ return a+((b*b)/2.0); } );
+        PRINT_VEC_BACK( L );
+        PRINT_VEC_BACK( targets );
+
+        thrust::transform( L.begin(), L.end(), targets.begin(), diffs.begin(), [](T a, T b) -> T { return a-b; } ); // Diffs
+
+        PRINT_VEC_BACK( L );
+        PRINT_VEC_BACK( targets );
+        PRINT_VEC_BACK( diffs );
+
+        //_lastError = thrust::reduce( diffs.begin(), diffs.end(), 0, [](T a, T b) -> T { return a+((b*b)/2.0); } );
+
+        for( auto &d : diffs )
+            _lastError += (d*d)/2.0;
+
+        //std::cout << _lastError << std::endl;
         _lastError /= (T)L.size();
+        //std::cout << _lastError << std::endl;
         _lastError = sqrt( _lastError );
+        //std::cout << _lastError << std::endl;
+
         
         //_lastError = thrust::inner_product( L.begin(), L.end(), targets.begin(), 0, thrust::plus<T>(), diffSquared2<T> );
 
@@ -414,7 +439,7 @@ struct NeuralNet
 
             if( i == sz ) // output layer
             {
-                std::cout << i << " : " << vecGrads.size() << std::endl;
+                //std::cout << i << " : " << vecGrads.size() << std::endl;
                 PRINT_VEC_BACK( L )
                 PRINT_VEC_BACK( diffs )
                 PRINT_VEC_BACK( G )
@@ -429,8 +454,8 @@ struct NeuralNet
                 PRINT_VEC_BACK( W )
                 PRINT_VEC_BACK( L )
                 PRINT_VEC_BACK( L2 )
-                PRINT_VEC_BACK( G )
                 PRINT_VEC_BACK( G2 )
+                PRINT_VEC_BACK( G )
 
 
                 int kmx = Wk.back()+1;  // Get assumed max key
@@ -442,10 +467,14 @@ struct NeuralNet
                     T sum = 0.0;
                     for( int x=0; x < kmod; x++ )
                     {
-                        sum += G2[x] * W[x+(g*kmod)];
+                        //int y = x+(g*kmod);
+                        int y = g+(x*kmod);
+                        sum += G2[x] * W[y];
                     }
                     G[g] = sum * derivSigmoid( L[g] );
                 }
+
+                PRINT_VEC_BACK( G )
 
                 thrust::host_vector<T> tmp_vec;
                 thrust::host_vector<T> tmp_vec_sum( L.size() );
@@ -608,148 +637,126 @@ struct NeuralNet
 
 	void store( std::string fileName )
 	{
-/*
+
         if( !_dirty )
             return;
 
-		XMLTag xml("NeuralNet");
+        std::ofstream myfile (fileName);
 
-		Layer<dataType>* layer = _inLayer;
-
-		while( layer->nextLayer != NULL || layer == _outLayer )
-		{
-			XMLTag &refLayer = xml.addTag( "layer" );
-
-			if( layer == _inLayer )
-				refLayer.setAttribute( "name", "input_layer" );
-			else if( layer == _outLayer )
-				refLayer.setAttribute( "name", "output_layer" );
-			else
-				refLayer.setAttribute( "name", "hidden_layer" );
-			std::string activation;
-
-			ActType act = layer->_activation;
-
-			if( act == linear )
-			{
-				activation = "linear";
-			}
-			else if( act == sigmoid )
-			{
-				activation = "sigmoid";
-			}
-			else if( act == softMax )
-			{
-				activation = "softMax";
-			}
-			else if( act == tangenth )
-			{
-				activation = "tangenth";
-			}
-			else if( act == relu )
-			{
-				activation = "relu";
-			}
-			else if( act == relul )
-			{
-				activation = "relul";
-			}
-			else if( act == none )
-			{
-				activation = "none";
-			}
-
-			refLayer.setAttribute( "activation", activation );
-			refLayer.setAttribute( "bias", layer->_bias );
-
-			XMLTag &refNodes = refLayer.addTag( "nodes" );
-
-			for( int n=0; n < layer->nodes.size(); n++ )
-			{
-				XMLTag &refNode = refNodes.addTag( "node" );
-
-				refNode.setAttribute( "bias", layer->nodes[n]->_bias );
-
-				if( layer != _outLayer )
-				{
-					XMLTag &refConnections = refNode.addTag( "connections" );
-
-					for( int c=0; c < layer->nodes[n]->conns.size(); c++ )
-					{
-						XMLTag &refConnection = refConnections.addTag( "connection" );
-						refConnection.addTag( "weight", layer->nodes[n]->conns[c]->weight );
-					}
-				}
-			}
-
-			if( layer == _outLayer )
-				break;
-
-			layer = layer->nextLayer;
-		}
-
-		xml.store( fileName.c_str(), true );
+        if (myfile.is_open())
+        for( auto &L : vecLayers )
+        {
+            myfile << "sigmoid:" << L.size();
+            for( auto &N : L )
+            {
+                myfile << ":";
+                myfile << N;
+            }
+            myfile << "\n";
+        }
+        for( auto &Ws : vecWeights )
+        {
+            myfile << "weights:" << Ws.size();
+            for( auto &w : Ws )
+            {
+                myfile << ":";
+                myfile << w;
+            }
+            myfile << "\n";
+        }
+        myfile.close();
 
         _dirty = false;
-*/
 	}
 
 	void load( std::string fileName )
 	{
-/*
-		XMLTag NNxml;
 
-		NNxml.load( fileName.c_str() );
+		ssize_t read;
+        int iNodeCount;
+        size_t len;
+		char *pch;
+        char *line = NULL;
 
-		clear();
+        FILE* fp = fopen( fileName.c_str(), "rb" );
 
-		for( int layer = 0; layer < NNxml.count(); layer++ )
-		{
-			std::string activation = NNxml[layer].attribute( "activation" );
-			bool bias = NNxml[layer].boolAttribute( "bias" );
+        if( fp != NULL )
+            line = (char*)malloc( 16*1024 );
 
-			XMLTag &xNodes = NNxml[layer]["nodes"];
-			Layer<T> *pLayer = NULL;
 
-			int count = xNodes.count();
+        int w=0;
+        if( fp != NULL )
+	    while( (read = getline( &line, &len, fp) ) != -1 )
+	    {
+            char szType[256];
 
-			if( bias )  count--;
+	        dataType val;
+	        pch = strtok (line," \t,:");
+            //std::cout << "Reading Line: " << line << std::endl;
 
-			// Add Layer - with nodes
-			if( activation == "linear" )
-				pLayer = addLayer( count, linear, bias );
-			else if( activation == "sigmoid" )
-				pLayer = addLayer( count, sigmoid, bias );
-			else if( activation == "tangenth" )
-				pLayer = addLayer( count, tangenth, bias );
-			else if( activation == "relu" ) 
-				pLayer = addLayer( count, relu, bias );
-			else if( activation == "relul" ) 
-				pLayer = addLayer( count, relul, bias );
-			else if( activation == "softMax" ) 
-				pLayer = addLayer( count, softMax, bias );
-		}
+            if( strncmp( "weights", line, 7 ) != 0 ) // Layers
+            {
+	            for( int t=0; (pch != NULL); t++ )
+	            {
+                    if( t == 0 )
+                    {
+                        sscanf (pch, "%s\n",(char*)&szType);
+		                pch = strtok (NULL, " \t,:");
+                    }
+                    else if( t == 1 )
+                    {
+                        sscanf (pch, "%d\n",&iNodeCount);
+		                pch = strtok (NULL, " \t,:");
+                        addLayer( iNodeCount, sigmoid, false );
+                        //std::cout << "Adding " << szType << " layer with " << iNodeCount << " nodes\n";
+                    }  
+                    else
+                    {
+		                sscanf (pch, "%lf\n", &val);
+		                pch = strtok (NULL, " \t,:");
+                        vecLayers.back()[t-2] = val;
+                        //std::cout << val << "  ";      
+                    }
 
-		try
-		{
-			for( int layer = 0; layer < NNxml.count(); layer++ )
-			{
+                    //std::cout << std::endl;
+       	        }
+            }
+            else // Weights
+            {
+	            for( int t=0; (pch != NULL); t++ )
+	            {
+                    if( t == 0 )
+                    {
+                        sscanf (pch, "%s\n",(char*)&szType);
+		                pch = strtok (NULL, " \t,:");
+                    }
+                    else if( t == 1 )
+                    {
+                        sscanf (pch, "%d\n",&iNodeCount);
+		                pch = strtok (NULL, " \t,:");
+                        //addLayer( iNodeCount, sigmoid, false );
+                        //std::cout << "Adding weights with " << iNodeCount << " weights\n";
+                    }  
+                    else
+                    {
+		                sscanf (pch, "%lf\n", &val);
+		                pch = strtok (NULL, " \t,:");
+                        vecWeights[w][t-2] = val;
+                        //std::cout << val << "  ";      
+                    }
 
-				XMLTag &xNodes = NNxml[layer]["nodes"];
+                    //std::cout << std::endl;
+       	        }
+                w++;
+            }
+        }
 
-				for( int node=0; node<xNodes.count(); node++ )
-				{
-					XMLTag &xConnections = xNodes[node]["connections"];
+        fclose( fp );
 
-					for( int conn=0; conn<xConnections.count(); conn++ )
-						layers[layer]->nodes[node]->conns[conn]->weight = xConnections[conn]["weight"].floatValue();
-				}
-			}
-		}
-		catch(...){}
+
+
 
         _dirty = false;
-*/
 	}
 };
 
@@ -1205,7 +1212,7 @@ int main( int argc, char**argv)
 
 			//printf( "[%f]", NN.getOutput(0) );
 
-			printf( "\n" );
+			//printf( "\n" );
 		}
 
 	}
