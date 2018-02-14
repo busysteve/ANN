@@ -462,15 +462,28 @@ struct NeuralNet
                 int ksz = Wk.size();
                 int kmod= ksz / kmx;
 
-                for( int g=0; g < G.size(); g++ )
+                if(false) for( int g=0; g < G.size(); g++ )
                 {
                     T sum = 0.0;
                     for( int x=0; x < kmod; x++ )
                     {
-                        //int y = x+(g*kmod);
                         int y = g+(x*kmod);
+                        //std::cout << y << " : ";
                         sum += G2[x] * W[y];
                     }
+                    //std::cout << std::endl;
+                    G[g] = sum * derivSigmoid( L[g] );
+                }
+                else for( int g=0; g < G.size(); g++ )
+                {
+                    T sum = 0.0;
+                    for( int x=0; x < kmod; x++ )
+                    {
+                        int y = x+(g*kmod);
+                        std::cout << y << " : ";
+                        sum += G2[x] * W[y];
+                    }
+                    std::cout << std::endl;
                     G[g] = sum * derivSigmoid( L[g] );
                 }
 
@@ -527,7 +540,7 @@ struct NeuralNet
 
 
         int sz = vecLayers.size();
-        for( int i=sz-2; i > 1; i-- )
+        for( int i=sz-2; i >= 0; i-- )
         {
             auto &W = vecWeights[i];
             auto &Wk = vecForwardWeightKeys[i];
@@ -553,21 +566,25 @@ struct NeuralNet
             int ksz = Wk.size();
             int kmod= ksz / kmx;
 
-            for( int n=L.size()-1; n >= 0 ; n-- )
+            std::cout << std::endl;
+
+            for( int n=0; n < L.size(); n++ )
             {
                 for( int x=0; x < kmod; x++ )
                 {
+                    //int y = x+(n*kmod);
                     int y = x+(n*kmod);
                     delta = D[y];
                     grad = G[n];
                     out = L[n];
                     weight = W[y];
-
                     delta = (learnRate * grad * out) + (momentum * delta);
-
                     D[y] = delta;
                     W[y] += delta;
+                    
+                    std::cout << y << " : ";
                 }
+                std::cout << std::endl;
             }
         }
 	}
@@ -1212,7 +1229,7 @@ int main( int argc, char**argv)
 
 			//printf( "[%f]", NN.getOutput(0) );
 
-			//printf( "\n" );
+			printf( "\n" );
 		}
 
 	}
